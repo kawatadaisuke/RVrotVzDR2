@@ -14,12 +14,19 @@ import matplotlib.gridspec as gridspec
 from scipy import stats
 from scipy import optimize
 import scipy.interpolate
-from galpy.util import bovy_coords
+from galpy.util import bovy_coords, bovy_plot
+from extreme_deconvolution import extreme_deconvolution
 
 ##### main programme start here #####
 
 # flags
+# True: MC sampling on
+MCsample = True
 
+# number of MC sampling
+nmc = 100
+# epoch
+epoch = 2000.0
 # constant for proper motion unit conversion
 pmvconst = 4.74047
 usun = 11.1
@@ -34,6 +41,11 @@ zsun = 0.015
 e_plxlim = 0.15
 zmaxlim = 0.2
 ymaxlim = 0.5
+# minimum plx
+plxlim=0.001
+
+if MCsample == True:
+   print ' MCsample is on. Nmc = ',nmc
 
 nsample = 3
 
@@ -122,6 +134,10 @@ for isamp in range(nsample):
     e_teff = star['e_Teff'][sindx]
     # Av
     av_obs = star['Av_obs'][sindx]
+    # error correalation
+    plxpmra_corrs = np.zeros_like(e_plxs) 
+    plxpmdec_corrs = np.zeros_like(e_plxs) 
+    pmradec_corrs = np.zeros_like(e_plxs) 
 
     # age [Fe/H] only for Galaxia
     fehs_true = star['[Fe/H]_true'][sindx]
@@ -133,9 +149,11 @@ for isamp in range(nsample):
 
     # get observed position and velocity
     dists_obs = 1.0/plxs_obs
+
     # velocity
-    Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb(pmras_obs, pmdecs_obs, ras, \
-            decs, degree=True, epoch=2000.0)
+    Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
+        pmras_obs, pmdecs_obs, ras, \
+        decs, degree=True, epoch=epoch)
     pmlons_obs = Tpmllpmbb[:,0]
     pmlats_obs = Tpmllpmbb[:,1]
     # mas/yr -> km/s
@@ -151,8 +169,9 @@ for isamp in range(nsample):
     rgals_obs = np.sqrt(xposgals_obs**2+yposgals_obs**2)
 
     if isamp == 0:
-        Tvxvyvz = bovy_coords.vrpmllpmbb_to_vxvyvz(hrvs_obs, Tpmllpmbb[:,0], \
-          Tpmllpmbb[:,1], glons, glats, dists_obs, XYZ=False, degree=True)
+        Tvxvyvz = bovy_coords.vrpmllpmbb_to_vxvyvz(\
+            hrvs_obs, Tpmllpmbb[:,0], Tpmllpmbb[:,1], \
+            glons, glats, dists_obs, XYZ=False, degree=True)
         vxs_obs = Tvxvyvz[:,0]
         vys_obs = Tvxvyvz[:,1]
         vzs_obs = Tvxvyvz[:,2]+wsun
@@ -160,8 +179,10 @@ for isamp in range(nsample):
         hrvxys_obs = hrvs_obs*np.cos(glatrads)
         vxgals_obs = vxs_obs+usun
         vygals_obs = vys_obs+vsun
-        vrots_obs = (vxgals_obs*yposgals_obs-vygals_obs*xposgals_obs)/rgals_obs
-        vrads_obs = (vxgals_obs*xposgals_obs+vygals_obs*yposgals_obs)/rgals_obs
+        vrots_obs = (vxgals_obs*yposgals_obs-vygals_obs*xposgals_obs) \
+            /rgals_obs
+        vrads_obs = (vxgals_obs*xposgals_obs+vygals_obs*yposgals_obs) \
+            /rgals_obs
     else:
         # approximation
         vrots_obs = np.copy(vlons_obs)
@@ -172,8 +193,120 @@ for isamp in range(nsample):
         vrads_obs = np.zeros_like(vrots_obs)
         vzs_obs = np.copy(vlats_obs)+wsun
 
+        # set error zero
+        e_rgals = np.zeros_like(rgals_obs)
+        e_vrots = np.zeros_like(vrads_obs)
+        e_vzs = np.zeros_like(vrads_obs)
+
+    if MCsample == True:
+        # sample from parallax proper motion covariance matrix
+
+        plxpmradec_mc = np.empty((nstars, 3, nmc))
+        plxpmradec_mc[:, 0, :] = np.atleast_2d(plxs_obs).T
+        plxpmradec_mc[:, 1, :] = np.atleast_2d(pmras_obs).T
+        plxpmradec_mc[:, 2, :] = np.atleast_2d(pmdecs_obs).T
+        for ii in range(nstars):
+            # constract covariance matrix
+            tcov = np.zeros((3, 3))
+            # /2 because of symmetrization below
+            tcov[0, 0] = e_plxs[ii]**2.0 / 2.0
+            tcov[1, 1] = e_pmras[ii]**2.0 / 2.0
+            tcov[2, 2] = e_pmdecs[ii]**2.0 / 2.0
+            tcov[0, 1] = plxpmra_corrs[ii] * e_plxs[ii] * e_pmras[ii]
+            tcov[0, 2] = plxpmdec_corrs[ii] * e_plxs[ii] * e_pmdecs[ii]
+            tcov[1, 2] = pmradec_corrs[ii] * e_pmras[ii] * e_pmdecs[ii]
+            # symmetrise
+            tcov = (tcov + tcov.T)
+            # Cholesky decomp.
+            L = np.linalg.cholesky(tcov)
+            plxpmradec_mc[ii] += np.dot(L, np.random.normal(size=(3, nmc)))
+
+        # distribution of velocity and distance.
+        # -> pml pmb
+        ratile = np.tile(ras, (nmc, 1)).flatten()
+        dectile = np.tile(decs, (nmc, 1)).flatten()
+        pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
+            plxpmradec_mc[:, 1, :].T.flatten(), \
+            plxpmradec_mc[:, 2, :].T.flatten(), \
+            ratile, dectile, degree=True, epoch=epoch)
+        # reshape
+        pmllbb_sam = pmllbb_sam.reshape((nmc, nstars, 2))
+        # distance MC sampling
+        plxs_sam = plxpmradec_mc[:, 0, :].T
+        # check negative parallax
+        plxs_samflat= plxs_sam.flatten()
+        copysamflat=np.copy(plxs_samflat)
+        if len(copysamflat[plxs_samflat<plxlim])>0: 
+            print len(copysamflat[plxs_samflat<plxlim]),' plx set to ',plxlim
+        plxs_samflat[copysamflat<plxlim]=plxlim
+        plxs_sam = np.reshape(plxs_samflat,(nmc,nstars))
+        # distance
+        dists_sam = 1.0/plxs_sam
+        # mas/yr -> km/s
+        vlons_sam = pmvconst*pmllbb_sam[:,:,0]*dists_sam
+        vlats_sam = pmvconst*pmllbb_sam[:,:,1]*dists_sam
+        # galactic position
+        distxys_sam = dists_sam*np.cos(glatrads)
+        xpos_sam = distxys_sam*np.cos(glonrads)
+        ypos_sam = distxys_sam*np.sin(glonrads)
+        zpos_sam = dists_sam*np.sin(glatrads)
+        rgals_sam = np.sqrt((xpos_sam-rsun)**2+ypos_sam**2)
+
+        if isamp == 0:
+            hrvs_sam = np.random.normal(hrvs_obs, e_hrvs, (nmc, nstars))
+            vxvyvz_sam = bovy_coords.vrpmllpmbb_to_vxvyvz( \
+                hrvs_sam.flatten(), pmllbb_sam[:,:,0].flatten(), \
+                pmllbb_sam[:,:,1].flatten(), \
+                np.tile(glons, (nmc, 1)).flatten(), \
+                np.tile(glats, (nmc, 1)).flatten(), \
+                dists_sam.flatten(), degree=True)
+            vxvyvz_sam = vxvyvz_sam.reshape((nmc, nstars, 3))
+            vxs_sam = vxvyvz_sam[:,:,0]
+            vys_sam = vxvyvz_sam[:,:,1]
+            vzs_sam = vxvyvz_sam[:,:,2]+wsun
+            # 2D velocity
+            hrvxys_sam = hrvs_sam*np.cos(glatrads)
+            vxgals_sam = vxs_sam+usun
+            vygals_sam = vys_sam+vsun
+            vrots_sam = (vxgals_sam*ypos_sam-vygals_sam*(xpos_sam-rsun)) \
+                        /rgals_sam
+            vrads_sam = (vxgals_sam*(xpos_sam-rsun)+vygals_sam*ypos_sam) \
+                        /rgals_sam
+            # f = open('mcsample_stars.asc','w')
+            # for j in range(100000,100100):
+            #    for i in range(nmc):
+            #        print >>f, "%d %d %f %f %f %f %f %f" % (i, j, \
+            #            plxs_sam[i,j], plxs_obs[j], \
+            #            rgals_sam[i,j] , rgals_obs[j], \
+            #            vrots_sam[i,j] , vrots_obs[j])
+            # f.close()
+        else:
+            vrots_sam = np.copy(vlons_sam)
+            vrots_sam[:,np.logical_or(glons<90, glons>270)] = \
+                vrots_sam[:,np.logical_or(glons<90, glons>270)]+vsun
+            vrots_sam[:,np.logical_and(glons>=90, glons<=270)] = \
+                -vrots_sam[:,np.logical_and(glons>=90, glons<=270)]+vsun
+            vrads_sam = np.zeros_like(vrots_sam)
+            vzs_sam = np.copy(vlats_sam)+wsun
+        # error estimats dispersion (use observed one for mean value)
+        # rgals_obs = np.mean(rgals_sam, axis=0).reshape(nstars)
+        e_rgals = np.std(rgals_sam, axis=0).reshape(nstars)
+        # vzs_obs = np.mean(vzs_sam, axis=0).reshape(nstars)
+        e_vzs = np.std(vzs_sam, axis=0).reshape(nstars)
+        # vrots_obs = np.mean(vrots_sam, axis=0).reshape(nstars)
+        e_vrots = np.std(vrots_sam, axis=0).reshape(nstars)
+        # position
+        # xpos_obs = np.mean(xpos_sam, axis=0).reshape(nstars)
+        # ypos_obs = np.mean(ypos_sam, axis=0).reshape(nstars)
+        # zpos_obs = np.mean(zpos_sam, axis=0).reshape(nstars)
+        # dists_obs = np.mean(dists_sam, axis=0).reshape(nstars)
+        # vrads_obs = np.mean(vrads_sam, axis=0).reshape(nstars)
+
+
     # Vrot defined w.r.t. solar velocity
     vrots_obs -= vcircsun
+    if MCsample == True:
+        vrots_sam -= vcircsun
 
     if isamp == 0:
         f=open('star_RVrotVz_FRVS.asc','w')
@@ -182,31 +315,145 @@ for isamp in range(nsample):
     else:
         f=open('star_RVrotVz_A.asc','w')
     for i in range(nstars):
-        print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f" \
+        print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
           %(xpos_obs[i], ypos_obs[i], zpos_obs[i], rgals_obs[i], vrots_obs[i], \
             vrads_obs[i], vzs_obs[i], dists_obs[i], glons[i], glats[i], \
-            fehs_true[i], ages_true[i])
+            fehs_true[i], ages_true[i], e_rgals[i], e_vrots[i], e_vzs[i])
     f.close()
 
     # output velocity dispersion of the sample
     print ' velocity dispersion Vrot, Vz = ', np.std(vrots_obs), np.std(vzs_obs)
 
     # plot R vs Vrot
-    plt.scatter(rgals_obs, vrots_obs, c=ages_true)
-    plt.xlabel(r"Rgal (kpc)", fontsize=18, fontname="serif")
-    plt.ylabel(r"Vrot (km/s)", fontsize=18, fontname="serif")
-    cbar=plt.colorbar()
-    cbar.set_label(r'Age')
-    plt.show()
+    # plt.scatter(rgals_obs, vrots_obs, c=ages_true)
+    # plt.xlabel(r"Rgal (kpc)", fontsize=18, fontname="serif")
+    # plt.ylabel(r"Vrot (km/s)", fontsize=18, fontname="serif")
+    # cbar=plt.colorbar()
+    # cbar.set_label(r'Age')
+    # plt.show()
 
     # plot R vs Vz
-    plt.scatter(rgals_obs, vzs_obs, c=ages_true)
-    plt.xlabel(r"Rgal (kpc)", fontsize=18, fontname="serif")
-    plt.ylabel(r"Vz (km/s)", fontsize=18, fontname="serif")
+    # plt.scatter(rgals_obs, vzs_obs, c=ages_true)
+    # plt.xlabel(r"Rgal (kpc)", fontsize=18, fontname="serif")
+    # plt.ylabel(r"Vz (km/s)", fontsize=18, fontname="serif")
     # plt.axis([-1.0,1.0,-1.0,1.0],'scaled')
-    cbar=plt.colorbar()
-    cbar.set_label(r'Age')
-    plt.show()
+    # cbar=plt.colorbar()
+    # cbar.set_label(r'Age')
+    # plt.show()
+
+    if MCsample == True:
+        # fit with mix of Gaussian
+        # number of Gaussian
+        ngauss = 3
+        # nvel = 2, 0: Vrot, 1: Vrot
+        nvel = 2
+        # set range
+        rw = 0.5
+        if isamp == 0:
+            rrangexd = np.array([rsun-0.7, rsun+0.7])
+            # nradgridxd = 7+1  
+            nradgridxd = 3+1  
+        elif isamp == 1: 
+            rrangexd = np.array([rsun-2.0, rsun+2.0])
+            # nradgridxd = 10+1
+            nradgridxd = 5+1  
+        else:
+            rrangexd = np.array([rsun-3.0, rsun+3.0])
+            # nradgridxd = 15+1
+            nradgridxd = 7+1
+        rgridxd = np.linspace(rrangexd[0], rrangexd[1], nradgridxd)
+        print ' rgridxd = ',rgridxd
+
+        for ivel in range(nvel):
+            if ivel == 0: 
+                print ngauss,'Gaussian Mixture model for Vrot'
+                # Vrot
+                if isamp == 0:
+                    gauxd_amp_FRVS = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_mean_FRVS = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_rr_FRVS = np.zeros((nradgridxd))
+                elif isamp == 1:
+                    gauxd_amp_FF = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_mean_FF = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_rr_FF = np.zeros((nradgridxd))
+                else:
+                    gauxd_amp_A = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_mean_A = np.zeros((nvel,nradgridxd,ngauss))
+                    gauxd_rr_A = np.zeros((nradgridxd))
+            else:
+                print ngauss,'Gaussian Mixture model for Vz'
+
+            for irad,rr in enumerate(rgridxd):
+                cirad = '{0:02d}'.format(int(rr*10))
+                # print ' irad = ',cirad
+                indx = np.fabs(rgals_obs-rr)<rw
+                # fit with mix of Gaussians
+                # for Vrot
+                print ' rr, nsamp =',rr, len(vrots_obs[indx])
+                vals = vrots_obs[indx]
+                e_vals = e_vrots[indx]
+                ydata = np.atleast_2d(vals).T
+                ycovar = e_vals**2
+                # print ' input shape =',ydata.shape, ycovar
+                initamp = np.random.uniform(size=ngauss)
+                initamp /= np.sum(initamp)
+                m = np.median(vals)
+                s= 1.4826*np.median(np.fabs(vals-m))
+                print ' initial guess of median, sig=',m,s
+                initmean= []
+                initcovar= []
+                for ii in range(ngauss):
+                    initcovar.append(s**2.)
+                initcovar= np.array([[initcovar]]).T
+                # Now let the means vary
+                for ii in range(ngauss):
+                    initmean.append(m+np.random.normal()*s)
+                initmean= np.array([initmean]).T
+                print("lnL",extreme_deconvolution(ydata,ycovar, \
+                    initamp,initmean,initcovar))
+                print("amp, mean, std. dev.",initamp,initmean[:,0], \
+                    np.sqrt(initcovar[:,0,0]))
+                # store the amp and mean
+                # sort with amplitude
+                sortindx = np.argsort(initamp)
+                sortindx = sortindx[::-1]
+                # print ' sorted amp, mean = ', initamp[sortindx], \
+                #    initmean[sortindx,0]
+                if isamp == 0:
+                    gauxd_amp_FRVS[ivel,irad,:] = initamp[sortindx]
+                    gauxd_mean_FRVS[ivel,irad,:] = initmean[sortindx,0]
+                    gauxd_rr_FRVS[irad] = rr
+                elif isamp == 1:
+                    gauxd_amp_FF[ivel,irad,:] = initamp[sortindx]
+                    gauxd_mean_FF[ivel,irad,:] = initmean[sortindx,0]
+                    gauxd_rr_FF[irad] = rr
+                else:
+                    gauxd_amp_A[ivel,irad,:] = initamp[sortindx]
+                    gauxd_mean_A[ivel,irad,:] = initmean[sortindx,0]
+                    gauxd_rr_A[irad] = rr
+                
+                # for plot
+                xs = np.linspace(-50.,50.,1001)
+                ys = np.sum(np.atleast_2d( \
+                    initamp/np.sqrt(initcovar[:,0,0])).T\
+                    *np.exp(-0.5*(xs-np.atleast_2d(initmean[:,0]).T)**2. \
+                    /np.atleast_2d(initcovar[:,0,0]).T),axis=0)\
+                    /np.sqrt(2.*np.pi)
+                _= bovy_plot.bovy_hist(vals,bins=41,range=[-50.,50.],
+                       histtype='step',lw=2.,normed=True,overplot=True)
+                plt.plot(xs,ys)
+                for ii in range(ngauss):
+                    ys = (initamp[ii]/np.sqrt(initcovar[ii,0,0]))\
+                        *np.exp(-0.5*(xs-initmean[ii,0])**2. \
+                        /initcovar[ii,0,0])/np.sqrt(2.*np.pi)
+                    plt.plot(xs,ys)
+                # print("Combined <v^2>, sqrt(<v^2>):",combined_sig2( \
+                #    initamp,initmean[:,0],initcovar[:,0,0]),
+                #    np.sqrt(combined_sig2(initamp,initmean[:,0],initcovar[:,0,0])))
+                plt.xlabel(r'$V\,(\mathrm{km\,s}^{-1})$')
+                filename = 'samp'+str(isamp)+'vdisp'+cirad+'.jpg'
+                plt.savefig(filename)
+                plt.clf()
 
     # minimum number of stars in each column
     nsmin = 25
@@ -218,9 +465,16 @@ for isamp in range(nsample):
     vrotrange = np.array([-30, 30.0])
 
     # 2D histogram 
+    # if MCsample == True:
+    # This makes spurious features, because of correlation
+    # H, xedges, yedges = np.histogram2d(rgals_sam.flatten(), \
+    #               vrots_sam.flatten(), \
+    #               bins=(ngridx, ngridy), \
+    #               range=(rrange, vrotrange))
+    # else : 
     H, xedges, yedges = np.histogram2d(rgals_obs, vrots_obs, \
-                   bins=(ngridx, ngridy), \
-                   range=(rrange, vrotrange))
+                        bins=(ngridx, ngridy), \
+                        range=(rrange, vrotrange))
     # set x-axis (Rgal) is axis=1
     H = H.T
     # normalised by column
@@ -283,33 +537,67 @@ for isamp in range(nsample):
         HA_RVz_xedges = np.copy(xedges)
         HA_RVz_yedges = np.copy(yedges)
 
-
-# combined plot for R vs Vrot
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "stixsans"
 plt.rcParams["font.size"] = 16
-
+# combined plot for R vs Vrot
 # colour mapscale
 cmin = 0.0
 cmax = 0.1
-
+gauamplim=0.1
 f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(6,8))
 ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1], \
-                   HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+                   HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]], \
+           cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_FRVS[0,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
+                c='w', s = 100*gauxd_amp_FRVS[0,sindx,ii], marker = marker)
 ax1.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+ax1.tick_params(labelsize=16)
 ax1.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
 ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1], \
-                   HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1]])
+                   HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1]], \
+           cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_FF[0,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
+                c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
 ax2.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+ax2.tick_params(labelsize=16)
 ax2.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
 im = ax3.imshow(HA_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HA_RVrot_xedges[0], HA_RVrot_xedges[-1], \
-                   HA_RVrot_yedges[0], HA_RVrot_yedges[-1]])
+                   HA_RVrot_yedges[0], HA_RVrot_yedges[-1]], \
+           cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_A[0,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[0,sindx,ii], \
+                c='w', s = 100*gauxd_amp_A[0,sindx,ii], marker = marker)
+ax3.tick_params(labelsize=16)
 ax3.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
 plt.xlabel(r"R$_{\rm gal}$ (kpc)", fontsize=18)
 plt.ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
@@ -323,19 +611,52 @@ f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(6,8))
 ax1.imshow(HFRVS_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVz_xedges[0], HFRVS_RVz_xedges[-1], \
-                   HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1]])
+                   HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1]], cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_FRVS[1,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[1,sindx,ii], \
+                c='w', s = 100*gauxd_amp_FRVS[1,sindx,ii], marker = marker)
 ax1.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+ax1.tick_params(labelsize=16)
 ax1.set_yticks([-10, 0.0, 10.0])
 ax2.imshow(HFF_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVz_xedges[0], HFF_RVz_xedges[-1], \
-                   HFF_RVz_yedges[0], HFF_RVz_yedges[-1]])
+                   HFF_RVz_yedges[0], HFF_RVz_yedges[-1]], cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_FF[1,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[1,sindx,ii], \
+                c='w', s = 100*gauxd_amp_FF[1,sindx,ii], marker = marker)
 ax2.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+ax2.tick_params(labelsize=16)
 ax2.set_yticks([-10, 0.0, 10.0])
-ax3.imshow(HA_RVz, interpolation='gaussian', origin='lower', \
+im = ax3.imshow(HA_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HA_RVz_xedges[0], HA_RVz_xedges[-1], \
-                   HA_RVz_yedges[0], HA_RVz_yedges[-1]])
+                   HA_RVz_yedges[0], HA_RVz_yedges[-1]], cmap=cm.jet)
+for ii in range(ngauss):
+    sindx = np.where(gauxd_amp_A[1,:,ii]>gauamplim)
+    if ii == 0: 
+        marker = 's'
+    elif ii == 1:
+        marker = '^'
+    else:
+        marker = 'o'
+    ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[1,sindx,ii], \
+                c='w', s = 100*gauxd_amp_A[1,sindx,ii], marker = marker)
+ax3.tick_params(labelsize=16)
 ax3.set_yticks([-10, 0.0, 10.0])
 plt.xlabel(r"R$_{\rm z}$ (kpc)", fontsize=18)
 plt.ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
