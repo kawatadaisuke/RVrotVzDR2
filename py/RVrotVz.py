@@ -193,10 +193,10 @@ for isamp in range(nsample):
         vrads_obs = np.zeros_like(vrots_obs)
         vzs_obs = np.copy(vlats_obs)+wsun
 
-        # set error zero
-        e_rgals = np.zeros_like(rgals_obs)
-        e_vrots = np.zeros_like(vrads_obs)
-        e_vzs = np.zeros_like(vrads_obs)
+    # set error zero
+    e_rgals = np.zeros_like(rgals_obs)
+    e_vrots = np.zeros_like(vrads_obs)
+    e_vzs = np.zeros_like(vrads_obs)
 
     if MCsample == True:
         # sample from parallax proper motion covariance matrix
@@ -342,6 +342,7 @@ for isamp in range(nsample):
     # plt.show()
 
     if MCsample == True:
+
         # fit with mix of Gaussian
         # number of Gaussian
         ngauss = 3
@@ -383,6 +384,15 @@ for isamp in range(nsample):
             else:
                 print ngauss,'Gaussian Mixture model for Vz'
 
+            # output amg, mean dispersion
+            filename = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
+            fr = open(filename, 'w')
+            filename = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
+            fz = open(filename, 'w')
+
+            print >>fr, "# ngauss = %d, nrgrid = %d" % (ngauss, nradgridxd)
+            print >>fz, "# ngauss = %d, nrgrid = %d" % (ngauss, nradgridxd)
+
             for irad,rr in enumerate(rgridxd):
                 cirad = '{0:02d}'.format(int(rr*10))
                 # print ' irad = ',cirad
@@ -413,6 +423,16 @@ for isamp in range(nsample):
                     initamp,initmean,initcovar))
                 print("amp, mean, std. dev.",initamp,initmean[:,0], \
                     np.sqrt(initcovar[:,0,0]))
+                if ivel == 0:
+                    for ii in range(ngauss):
+                        print >>fr, "%d %f %f %f %f" % (ii, rr, \
+                            initamp[ii], initmean[ii,0], \
+                            np.sqrt(initcovar[ii,0,0]))
+                else:
+                    for ii in range(ngauss):
+                        print >>fz, "%d %f %f %f %f" % (ii, rr, \
+                            initamp[ii], initmean[ii,0], \
+                            np.sqrt(initcovar[ii,0,0]))
                 # store the amp and mean
                 # sort with amplitude
                 sortindx = np.argsort(initamp)
@@ -455,6 +475,9 @@ for isamp in range(nsample):
                 plt.savefig(filename)
                 plt.clf()
 
+            fr.close()
+            fz.close()
+
     # minimum number of stars in each column
     nsmin = 25
     # set number of grid
@@ -462,7 +485,8 @@ for isamp in range(nsample):
     ngridy = 40
     # grid plot for R vs. Vrot
     rrange = np.array([rsun-4.0, rsun+4.0])
-    vrotrange = np.array([-30, 30.0])
+    vrotrange = np.array([-50, 50.0])
+    vrotticks = np.array([-40.0, -20.0, 0.0, 20.0, 40.0])
 
     # 2D histogram 
     # if MCsample == True:
@@ -508,6 +532,7 @@ for isamp in range(nsample):
     ngridy = 20
     rrange = np.array([rsun-4.0, rsun+4.0])
     vzrange = np.array([-20.0, 20.0])
+    vzticks = np.array([-10.0, 0.0, 10.0])
     # 2D histogram 
     H, xedges, yedges = np.histogram2d(rgals_obs, vzs_obs, \
                    bins=(ngridx, ngridy), \
@@ -537,6 +562,7 @@ for isamp in range(nsample):
         HA_RVz_xedges = np.copy(xedges)
         HA_RVz_yedges = np.copy(yedges)
 
+
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "stixsans"
 plt.rcParams["font.size"] = 16
@@ -545,127 +571,146 @@ plt.rcParams["font.size"] = 16
 cmin = 0.0
 cmax = 0.1
 gauamplim=0.1
-f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(6,8))
+f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
 ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1], \
                    HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]], \
            cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_FRVS[0,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
-                c='w', s = 100*gauxd_amp_FRVS[0,sindx,ii], marker = marker)
+ax1.set_xlim(HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1])
+ax1.set_ylim(HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_FRVS[0,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
+                c='w', marker = marker)
+        #        c='w', s = 100*gauxd_amp_FRVS[0,sindx,ii], marker = marker)
 ax1.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-ax1.tick_params(labelsize=16)
-ax1.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
+ax1.tick_params(labelsize=16, color='k')
+ax1.set_yticks(vrotticks)
 ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1], \
                    HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1]], \
            cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_FF[0,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
-                c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
+ax2.set_xlim(HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1])
+ax2.set_ylim(HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_FF[0,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
+                c='w', marker = marker)
+        #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
 ax2.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-ax2.tick_params(labelsize=16)
-ax2.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
+ax2.tick_params(labelsize=16, color='k')
+ax2.set_yticks(vrotticks)
 im = ax3.imshow(HA_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HA_RVrot_xedges[0], HA_RVrot_xedges[-1], \
                    HA_RVrot_yedges[0], HA_RVrot_yedges[-1]], \
            cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_A[0,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[0,sindx,ii], \
-                c='w', s = 100*gauxd_amp_A[0,sindx,ii], marker = marker)
-ax3.tick_params(labelsize=16)
-ax3.set_yticks([-20.0, -10, 0.0, 10.0, 20.0])
+ax3.set_xlim(HA_RVrot_xedges[0], HA_RVrot_xedges[-1])
+ax3.set_ylim(HA_RVrot_yedges[0], HA_RVrot_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_A[0,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[0,sindx,ii], \
+               c='w', marker = marker)
+        #       c='w', s = 100*gauxd_amp_A[0,sindx,ii], marker = marker)
+ax3.tick_params(labelsize=16, color='k')
+ax3.set_yticks(vrotticks)
 plt.xlabel(r"R$_{\rm gal}$ (kpc)", fontsize=18)
 plt.ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-f.subplots_adjust(hspace=0.01, right = 0.8)
+f.subplots_adjust(hspace=0.0, right = 0.8)
 cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
-f.colorbar(im, cax=cbar_ax)
+cb = f.colorbar(im, cax=cbar_ax)
+cb.ax.tick_params(labelsize=16)
 plt.show()
 
 # R vs. Vz
-f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(6,8))
+f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
 ax1.imshow(HFRVS_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVz_xedges[0], HFRVS_RVz_xedges[-1], \
                    HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1]], cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_FRVS[1,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[1,sindx,ii], \
-                c='w', s = 100*gauxd_amp_FRVS[1,sindx,ii], marker = marker)
+ax1.set_xlim(HFRVS_RVz_xedges[0], HFRVS_RVz_xedges[-1])
+ax1.set_ylim(HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_FRVS[1,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[1,sindx,ii], \
+                c='w', marker = marker)
 ax1.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-ax1.tick_params(labelsize=16)
-ax1.set_yticks([-10, 0.0, 10.0])
+ax1.tick_params(labelsize=16, color='k')
+ax1.set_yticks(vzticks)
 ax2.imshow(HFF_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVz_xedges[0], HFF_RVz_xedges[-1], \
                    HFF_RVz_yedges[0], HFF_RVz_yedges[-1]], cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_FF[1,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[1,sindx,ii], \
-                c='w', s = 100*gauxd_amp_FF[1,sindx,ii], marker = marker)
-ax2.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-ax2.tick_params(labelsize=16)
-ax2.set_yticks([-10, 0.0, 10.0])
+ax2.set_xlim(HFF_RVz_xedges[0], HFF_RVz_xedges[-1])
+ax2.set_ylim(HFF_RVz_yedges[0], HFF_RVz_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_FF[1,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[1,sindx,ii], \
+                c='w', marker = marker)
+ax2.tick_params(labelsize=16, color='k')
+ax2.set_yticks(vzticks)
 im = ax3.imshow(HA_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HA_RVz_xedges[0], HA_RVz_xedges[-1], \
                    HA_RVz_yedges[0], HA_RVz_yedges[-1]], cmap=cm.jet)
-for ii in range(ngauss):
-    sindx = np.where(gauxd_amp_A[1,:,ii]>gauamplim)
-    if ii == 0: 
-        marker = 's'
-    elif ii == 1:
-        marker = '^'
-    else:
-        marker = 'o'
-    ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[1,sindx,ii], \
-                c='w', s = 100*gauxd_amp_A[1,sindx,ii], marker = marker)
-ax3.tick_params(labelsize=16)
-ax3.set_yticks([-10, 0.0, 10.0])
+ax3.set_xlim(HA_RVz_xedges[0], HA_RVz_xedges[-1])
+ax3.set_ylim(HA_RVz_yedges[0], HA_RVz_yedges[-1])
+if MCsample == True:
+    for ii in range(ngauss):
+        sindx = np.where(gauxd_amp_A[1,:,ii]>gauamplim)
+        if ii == 0: 
+            marker = 's'
+        elif ii == 1:
+            marker = '^'
+        else:
+            marker = 'o'
+        ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[1,sindx,ii], \
+                c='w', marker = marker)
+ax3.tick_params(labelsize=16, color='k')
+ax3.set_yticks(vzticks)
 plt.xlabel(r"R$_{\rm z}$ (kpc)", fontsize=18)
 plt.ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-f.subplots_adjust(hspace=0.01)
-f.subplots_adjust(hspace=0.01, right = 0.8)
+f.subplots_adjust(hspace=0.0, right = 0.8)
 cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
-f.colorbar(im, cax=cbar_ax)
-plt.show()
-
+cb = f.colorbar(im, cax=cbar_ax)
+cb.ax.tick_params(labelsize=16)
 plt.show()
 
 
