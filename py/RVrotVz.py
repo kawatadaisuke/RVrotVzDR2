@@ -27,7 +27,7 @@ from extreme_deconvolution import extreme_deconvolution
 # True: MC sampling on
 MCsample = True
 # True: read gaussxd*.asc
-FileGauXD = True
+FileGauXD = False
 
 if FileGauXD == True:
     MCsample = False
@@ -393,7 +393,8 @@ for isamp in range(nsample):
             else:
                 print ngauss,'Gaussian Mixture model for Vz'
 
-        if MCsample == True:
+    if MCsample == True:
+        for ivel in range(nvel):
             # fit with Mixture of Gaussian using XD
 
             # output amg, mean dispersion
@@ -435,20 +436,22 @@ for isamp in range(nsample):
                     initamp,initmean,initcovar))
                 print("amp, mean, std. dev.",initamp,initmean[:,0], \
                     np.sqrt(initcovar[:,0,0]))
-                if ivel == 0:
-                    for ii in range(ngauss):
-                        print >>fr, "%d %f %f %f %f" % (ii, rr, \
-                            initamp[ii], initmean[ii,0], \
-                            np.sqrt(initcovar[ii,0,0]))
-                else:
-                    for ii in range(ngauss):
-                        print >>fz, "%d %f %f %f %f" % (ii, rr, \
-                            initamp[ii], initmean[ii,0], \
-                            np.sqrt(initcovar[ii,0,0]))
                 # store the amp and mean
                 # sort with amplitude
                 sortindx = np.argsort(initamp)
                 sortindx = sortindx[::-1]
+                if ivel == 0:
+                    for ii in range(ngauss):
+                        ist = sortindx[ii]
+                        print >>fr, "%d %f %f %f %f" % (ii, rr, \
+                            initamp[ist], initmean[ist,0], \
+                            np.sqrt(initcovar[ist,0,0]))
+                else:
+                    for ii in range(ngauss):
+                        ist = sortindx[ii]
+                        print >>fz, "%d %f %f %f %f" % (ii, rr, \
+                            initamp[ist], initmean[ist,0], \
+                            np.sqrt(initcovar[ist,0,0]))
                 # print ' sorted amp, mean = ', initamp[sortindx], \
                 #    initmean[sortindx,0]
                 if isamp == 0:
