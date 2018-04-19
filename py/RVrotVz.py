@@ -26,6 +26,11 @@ from extreme_deconvolution import extreme_deconvolution
 # flags
 # True: MC sampling on
 MCsample = True
+# True: read gaussxd*.asc
+FileGauXD = True
+
+if FileGauXD == True:
+    MCsample = False
 
 # number of MC sampling
 nmc = 100
@@ -345,7 +350,7 @@ for isamp in range(nsample):
     # cbar.set_label(r'Age')
     # plt.show()
 
-    if MCsample == True:
+    if np.logical_or(MCsample == True, FileGauXD == True):
 
         # fit with mix of Gaussian
         # number of Gaussian
@@ -356,16 +361,16 @@ for isamp in range(nsample):
         rw = 0.5
         if isamp == 0:
             rrangexd = np.array([rsun-0.7, rsun+0.7])
-            # nradgridxd = 7+1  
-            nradgridxd = 3+1  
+            nradgridxd = 7+1  
+            # nradgridxd = 3+1  
         elif isamp == 1: 
             rrangexd = np.array([rsun-2.0, rsun+2.0])
-            # nradgridxd = 20+1
-            nradgridxd = 5+1  
+            nradgridxd = 20+1
+            # nradgridxd = 5+1  
         else:
             rrangexd = np.array([rsun-3.0, rsun+3.0])
-            # nradgridxd = 30+1
-            nradgridxd = 7+1
+            nradgridxd = 30+1
+            # nradgridxd = 7+1
         rgridxd = np.linspace(rrangexd[0], rrangexd[1], nradgridxd)
         print ' rgridxd = ',rgridxd
 
@@ -387,6 +392,9 @@ for isamp in range(nsample):
                     gauxd_rr_A = np.zeros((nradgridxd))
             else:
                 print ngauss,'Gaussian Mixture model for Vz'
+
+        if MCsample == True:
+            # fit with Mixture of Gaussian using XD
 
             # output amg, mean dispersion
             filename = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
@@ -567,6 +575,63 @@ for isamp in range(nsample):
         HA_RVz_xedges = np.copy(xedges)
         HA_RVz_yedges = np.copy(yedges)
 
+    if FileGauXD == True:
+        # read Gaussian fitting results of XD
+        for ivel in range(nvel):
+            filev = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
+            # read the data
+            rdatav = np.loadtxt(filev, comments='#')
+            iline = 0
+            for irad in range(nradgridxd):
+                for ii in range(ngauss):
+                    if isamp == 0:
+                        gauxd_amp_FRVS[ivel,irad,ii] = rdatav[iline,2]
+                        gauxd_mean_FRVS[ivel,irad,ii] = rdatav[iline,3]
+                        gauxd_rr_FRVS[irad] = rdatav[iline,1]
+                    elif isamp == 1:
+                        gauxd_amp_FF[ivel,irad,ii] = rdatav[iline,2]
+                        gauxd_mean_FF[ivel,irad,ii] = rdatav[iline,3]
+                        gauxd_rr_FF[irad] = rdatav[iline,1]
+                    else:
+                        gauxd_amp_A[ivel,irad,ii] = rdatav[iline,2]
+                        gauxd_mean_A[ivel,irad,ii] = rdatav[iline,3]
+                        gauxd_rr_A[irad] = rdatav[iline,1]
+                    iline += 1
+
+# spiral arm positoin at l=0 or l=180 from Reid et al. (2014)
+rsunr14 = 8.34
+nsparm = 5
+rsparm = np.zeros(nsparm)
+for ii in range(nsparm):
+    if ii == 0:
+        # Sctum arm
+        tanpa = np.tan(19.8*np.pi/180.0)
+        angref = 27.6*np.pi/180.0
+        rref = 5.0
+    elif ii == 1:
+        # Sagittarius arm
+        tanpa = np.tan(6.9*np.pi/180.0)
+        angref = 25.6*np.pi/180.0
+        rref = 6.6
+    elif ii == 2:
+        # Local arm
+        tanpa = np.tan(12.8*np.pi/180.0)
+        angref = 8.9*np.pi/180.0
+        rref = 8.4
+    elif ii == 3:
+        # Perseus arm
+        tanpa = np.tan(9.4*np.pi/180.0)
+        angref = 14.2*np.pi/180.0
+        rref = 9.9
+    else:
+        # Outer arm
+        tanpa = np.tan(13.8*np.pi/180.0)
+        angref = 18.6*np.pi/180.0
+        rref = 13.0
+
+    # adjust to the current rsun
+    rsparm[ii] = np.exp(tanpa*angref)*rref-rsunr14+rsun
+    print ii,' arm Rgal = ',rsparm[ii]
 
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "stixsans"
@@ -577,6 +642,7 @@ cmin = 0.0
 cmax = 0.1
 gauamplim=0.1
 f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
+labpos = np.array([4.2, 40.0])
 ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1], \
@@ -584,7 +650,12 @@ ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            cmap=cm.jet)
 ax1.set_xlim(HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1])
 ax1.set_ylim(HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax1.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_FRVS[0,:,ii]>gauamplim)
         if ii == 0: 
@@ -594,8 +665,9 @@ if MCsample == True:
         else:
             marker = 'o'
         ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
-                c='w', marker = marker)
+                c='cyan', marker = marker)
         #        c='w', s = 100*gauxd_amp_FRVS[0,sindx,ii], marker = marker)
+ax1.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
 ax1.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
 ax1.tick_params(labelsize=16, color='k')
 ax1.set_yticks(vrotticks)
@@ -606,7 +678,12 @@ ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
            cmap=cm.jet)
 ax2.set_xlim(HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1])
 ax2.set_ylim(HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax2.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_FF[0,:,ii]>gauamplim)
         if ii == 0: 
@@ -616,8 +693,9 @@ if MCsample == True:
         else:
             marker = 'o'
         ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
-                c='w', marker = marker)
+                c='cyan', marker = marker)
         #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
+ax2.text(labpos[0], labpos[1], r'F', fontsize=16, color='w')
 ax2.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
 ax2.tick_params(labelsize=16, color='k')
 ax2.set_yticks(vrotticks)
@@ -628,7 +706,12 @@ im = ax3.imshow(HA_RVrot, interpolation='gaussian', origin='lower', \
            cmap=cm.jet)
 ax3.set_xlim(HA_RVrot_xedges[0], HA_RVrot_xedges[-1])
 ax3.set_ylim(HA_RVrot_yedges[0], HA_RVrot_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax3.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_A[0,:,ii]>gauamplim)
         if ii == 0: 
@@ -638,8 +721,9 @@ if MCsample == True:
         else:
             marker = 'o'
         ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[0,sindx,ii], \
-               c='w', marker = marker)
+               c='cyan', marker = marker)
         #       c='w', s = 100*gauxd_amp_A[0,sindx,ii], marker = marker)
+ax3.text(labpos[0], labpos[1], r'A', fontsize=16, color='w')
 ax3.tick_params(labelsize=16, color='k')
 ax3.set_yticks(vrotticks)
 plt.xlabel(r"R$_{\rm gal}$ (kpc)", fontsize=18)
@@ -652,6 +736,7 @@ plt.show()
 plt.close(f)
 
 # R vs. Vz
+labpos = np.array([4.2, 16.0])
 f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
 ax1.imshow(HFRVS_RVz, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
@@ -659,7 +744,12 @@ ax1.imshow(HFRVS_RVz, interpolation='gaussian', origin='lower', \
                    HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1]], cmap=cm.jet)
 ax1.set_xlim(HFRVS_RVz_xedges[0], HFRVS_RVz_xedges[-1])
 ax1.set_ylim(HFRVS_RVz_yedges[0], HFRVS_RVz_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax1.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_FRVS[1,:,ii]>gauamplim)
         if ii == 0: 
@@ -669,7 +759,8 @@ if MCsample == True:
         else:
             marker = 'o'
         ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[1,sindx,ii], \
-                c='w', marker = marker)
+                c='cyan', marker = marker)
+ax1.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
 ax1.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
 ax1.tick_params(labelsize=16, color='k')
 ax1.set_yticks(vzticks)
@@ -679,7 +770,12 @@ ax2.imshow(HFF_RVz, interpolation='gaussian', origin='lower', \
                    HFF_RVz_yedges[0], HFF_RVz_yedges[-1]], cmap=cm.jet)
 ax2.set_xlim(HFF_RVz_xedges[0], HFF_RVz_xedges[-1])
 ax2.set_ylim(HFF_RVz_yedges[0], HFF_RVz_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax2.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_FF[1,:,ii]>gauamplim)
         if ii == 0: 
@@ -689,7 +785,9 @@ if MCsample == True:
         else:
             marker = 'o'
         ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[1,sindx,ii], \
-                c='w', marker = marker)
+                c='cyan', marker = marker)
+ax2.text(labpos[0], labpos[1], r'F', fontsize=16, color='w')
+ax2.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
 ax2.tick_params(labelsize=16, color='k')
 ax2.set_yticks(vzticks)
 im = ax3.imshow(HA_RVz, interpolation='gaussian', origin='lower', \
@@ -698,7 +796,12 @@ im = ax3.imshow(HA_RVz, interpolation='gaussian', origin='lower', \
                    HA_RVz_yedges[0], HA_RVz_yedges[-1]], cmap=cm.jet)
 ax3.set_xlim(HA_RVz_xedges[0], HA_RVz_xedges[-1])
 ax3.set_ylim(HA_RVz_yedges[0], HA_RVz_yedges[-1])
-if MCsample == True:
+# spiral arm position
+ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
+for ii in range(nsparm):
+    xsp = np.array([rsparm[ii], rsparm[ii]])
+    ax3.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='w')
+if np.logical_or(MCsample == True, FileGauXD == True):
     for ii in range(ngauss):
         sindx = np.where(gauxd_amp_A[1,:,ii]>gauamplim)
         if ii == 0: 
@@ -708,7 +811,8 @@ if MCsample == True:
         else:
             marker = 'o'
         ax3.scatter(gauxd_rr_A[sindx],gauxd_mean_A[1,sindx,ii], \
-                c='w', marker = marker)
+                c='cyan', marker = marker)
+ax3.text(labpos[0], labpos[1], r'A', fontsize=16, color='w')
 ax3.tick_params(labelsize=16, color='k')
 ax3.set_yticks(vzticks)
 plt.xlabel(r"R$_{\rm z}$ (kpc)", fontsize=18)
