@@ -8,6 +8,7 @@
 import pyfits
 import math
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
@@ -16,6 +17,9 @@ from scipy import optimize
 import scipy.interpolate
 from galpy.util import bovy_coords, bovy_plot
 from extreme_deconvolution import extreme_deconvolution
+
+# for not displaying
+# matplotlib.use('Agg')
 
 ##### main programme start here #####
 
@@ -84,14 +88,14 @@ for isamp in range(nsample):
           *np.sin(np.pi*star['GLON_true']/180.0))
     # sindx=np.where((zabs<zmaxlim) & np.logical_or(star['GLON_true']<90.0,star['GLON_true']>270.0))
 
-    if np.logical_or(isamp == 0, isamp == 1):
-        # F star 
-        if isamp == 0:
-            print ' for bright F stars'  
-        else:
-            print ' for faint F stars'  
+    if isamp == 0:
+        print ' for bright F stars with RVS'  
         Tefflow = 6600.0
         Teffhigh = 6900.0
+    elif isamp == 1: 
+        print ' for faint F stars'  
+        Tefflow = 6600.0
+        Teffhigh = 7330.0
     elif isamp == 2:
         print ' for A stars'
         Tefflow = 7330.0
@@ -356,11 +360,11 @@ for isamp in range(nsample):
             nradgridxd = 3+1  
         elif isamp == 1: 
             rrangexd = np.array([rsun-2.0, rsun+2.0])
-            # nradgridxd = 10+1
+            # nradgridxd = 20+1
             nradgridxd = 5+1  
         else:
             rrangexd = np.array([rsun-3.0, rsun+3.0])
-            # nradgridxd = 15+1
+            # nradgridxd = 30+1
             nradgridxd = 7+1
         rgridxd = np.linspace(rrangexd[0], rrangexd[1], nradgridxd)
         print ' rgridxd = ',rgridxd
@@ -471,9 +475,10 @@ for isamp in range(nsample):
                 #    initamp,initmean[:,0],initcovar[:,0,0]),
                 #    np.sqrt(combined_sig2(initamp,initmean[:,0],initcovar[:,0,0])))
                 plt.xlabel(r'$V\,(\mathrm{km\,s}^{-1})$')
-                filename = 'samp'+str(isamp)+'vdisp'+cirad+'.jpg'
+                filename = 'samp'+str(isamp)+'vdisp'+cirad+'.png'
                 plt.savefig(filename)
                 plt.clf()
+                plt.close()
 
             fr.close()
             fz.close()
@@ -644,6 +649,7 @@ cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
 cb = f.colorbar(im, cax=cbar_ax)
 cb.ax.tick_params(labelsize=16)
 plt.show()
+plt.close(f)
 
 # R vs. Vz
 f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
@@ -712,7 +718,7 @@ cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
 cb = f.colorbar(im, cax=cbar_ax)
 cb.ax.tick_params(labelsize=16)
 plt.show()
-
+plt.close(f)
 
 
 
