@@ -20,12 +20,11 @@ from extreme_deconvolution import extreme_deconvolution
 from mpi4py import MPI
 
 # for not displaying
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 
 comm = MPI.COMM_WORLD
 nprocs = comm.Get_size()
 myrank = comm.Get_rank()
-
 
 ##### main programme start here #####
 
@@ -34,6 +33,8 @@ myrank = comm.Get_rank()
 MCsample = True
 # True: read gaussxd*.asc
 FileGauXD = False
+# True: output Gaussian model
+FigGauMod = True
 
 if FileGauXD == True:
     MCsample = False
@@ -328,7 +329,27 @@ for isamp in range(nsample):
         # zpos_obs = np.mean(zpos_sam, axis=0).reshape(nstars)
         # dists_obs = np.mean(dists_sam, axis=0).reshape(nstars)
         # vrads_obs = np.mean(vrads_sam, axis=0).reshape(nstars)
-
+        if nprocs > 1:
+            # MPI
+            # e_rgals
+            ncom = len(e_rgals)
+            sendbuf = np.zeros(ncom,dtype=np.float64)
+            sendbuf = e_rgals
+            recvbuf = np.zeros(ncom,dtype=np.float64)
+            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+            e_rgals = recvbuf
+            # e_vzs
+            sendbuf = np.zeros(ncom,dtype=np.float64)
+            sendbuf = e_vzs
+            recvbuf = np.zeros(ncom,dtype=np.float64)
+            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+            e_vzs = recvbuf
+            # e_vrots
+            sendbuf = np.zeros(ncom,dtype=np.float64)
+            sendbuf = e_vrots
+            recvbuf = np.zeros(ncom,dtype=np.float64)
+            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+            e_vrots = recvbuf
 
     # Vrot defined w.r.t. solar velocity
     vrots_obs -= vcircsun
@@ -379,19 +400,19 @@ for isamp in range(nsample):
         # nvel = 2, 0: Vrot, 1: Vrot
         nvel = 2
         # set range
-        rw = 0.5
+        rw = 0.2
         if isamp == 0:
             rrangexd = np.array([rsun-0.7, rsun+0.7])
-            # nradgridxd = 7+1  
-            nradgridxd = 3+1  
+            nradgridxd = 7+1  
+            # nradgridxd = 3+1  
         elif isamp == 1: 
             rrangexd = np.array([rsun-2.0, rsun+2.0])
-            # nradgridxd = 20+1
-            nradgridxd = 5+1  
+            nradgridxd = 20+1
+            # nradgridxd = 5+1  
         else:
             rrangexd = np.array([rsun-3.0, rsun+3.0])
-            # nradgridxd = 30+1
-            nradgridxd = 7+1
+            nradgridxd = 30+1
+            # nradgridxd = 7+1
         rgridxd = np.linspace(rrangexd[0], rrangexd[1], nradgridxd)
         # print ' rgridxd = ',rgridxd
 
@@ -431,7 +452,8 @@ for isamp in range(nsample):
                 indx = np.fabs(rgals_obs-rr)<rw
                 # fit with mix of Gaussians
                 # for Vrot
-                print 'iv, ir, rr, nsamp =',ivel,irad,rr,len(vrots_obs[indx])
+                print 'iv, ir, rr, nsamp, myrank =', \
+                    ivel,irad,rr,len(vrots_obs[indx]),myrank
                 vals = vrots_obs[indx]
                 e_vals = e_vrots[indx]
                 ydata = np.atleast_2d(vals).T
@@ -469,30 +491,31 @@ for isamp in range(nsample):
                 gauxd_rr[irad] = rr
 
                 # for plot
-                xs = np.linspace(-50.,50.,1001)
-                ys = np.sum(np.atleast_2d( \
-                    initamp/np.sqrt(initcovar[:,0,0])).T\
-                    *np.exp(-0.5*(xs-np.atleast_2d(initmean[:,0]).T)**2. \
-                    /np.atleast_2d(initcovar[:,0,0]).T),axis=0)\
-                    /np.sqrt(2.*np.pi)
-                _= bovy_plot.bovy_hist(vals,bins=41,range=[-50.,50.],
+                if FigGauMod == True:
+                    xs = np.linspace(-50.,50.,1001)
+                    ys = np.sum(np.atleast_2d( \
+                        initamp/np.sqrt(initcovar[:,0,0])).T\
+                        *np.exp(-0.5*(xs-np.atleast_2d(initmean[:,0]).T)**2. \
+                        /np.atleast_2d(initcovar[:,0,0]).T),axis=0)\
+                        /np.sqrt(2.*np.pi)
+                    _= bovy_plot.bovy_hist(vals,bins=41,range=[-50.,50.],
                        histtype='step',lw=2.,normed=True,overplot=True)
-                plt.plot(xs,ys)
-                for ii in range(ngauss):
-                    ys = (initamp[ii]/np.sqrt(initcovar[ii,0,0]))\
-                        *np.exp(-0.5*(xs-initmean[ii,0])**2. \
-                        /initcovar[ii,0,0])/np.sqrt(2.*np.pi)
                     plt.plot(xs,ys)
-                # print("Combined <v^2>, sqrt(<v^2>):",combined_sig2( \
-                #    initamp,initmean[:,0],initcovar[:,0,0]),
-                #    np.sqrt(combined_sig2(initamp,initmean[:,0],initcovar[:,0,0])))
-                plt.xlabel(r'$V\,(\mathrm{km\,s}^{-1})$')
-                filename = 'samp'+str(isamp)+'v'+str(ivel)+'r'+cirad+'.png'
-                plt.savefig(filename)
-                plt.clf()
-                plt.close()
+                    for ii in range(ngauss):
+                        ys = (initamp[ii]/np.sqrt(initcovar[ii,0,0]))\
+                            *np.exp(-0.5*(xs-initmean[ii,0])**2. \
+                            /initcovar[ii,0,0])/np.sqrt(2.*np.pi)
+                        plt.plot(xs,ys)
+                    # print("Combined <v^2>, sqrt(<v^2>):",combined_sig2( \
+                    #    initamp,initmean[:,0],initcovar[:,0,0]),
+                    #    np.sqrt(combined_sig2(initamp,initmean[:,0],initcovar[:,0,0])))
+                    plt.xlabel(r'$V\,(\mathrm{km\,s}^{-1})$')
+                    filename = 'samp'+str(isamp)+'v'+str(ivel)+'r'+cirad+'.png'
+                    plt.savefig(filename)
+                    plt.clf()
+                    plt.close()
 
-            if nprocs > 0:
+            if nprocs > 1:
                 # MPI
                 # gauxd_rr
                 ncom = len(gauxd_rr)
@@ -721,7 +744,7 @@ if myrank == 0:
     # colour mapscale
     cmin = 0.0
     cmax = 0.1
-    gauamplim=0.1
+    gauamplim=0.2
     f, (ax1, ax2, ax3) = plt.subplots(3, sharex = True, figsize=(8,8))
     labpos = np.array([4.2, 40.0])
     ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
@@ -815,7 +838,8 @@ if myrank == 0:
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
     cb.ax.tick_params(labelsize=16)
-    plt.show()
+    # plt.show()
+    plt.savefig('RVrot.eps')
     plt.close(f)
 
     # R vs. Vz
@@ -906,7 +930,8 @@ if myrank == 0:
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
     cb.ax.tick_params(labelsize=16)
-    plt.show()
+    # plt.show()
+    plt.savefig('RVz.eps')
     plt.close(f)
 
 
