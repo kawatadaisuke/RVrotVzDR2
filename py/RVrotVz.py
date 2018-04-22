@@ -32,7 +32,7 @@ myrank = comm.Get_rank()
 # True: MC sampling on
 MCsample = True
 # True: read gaussxd*.asc
-FileGauXD = False
+FileGauXD = True
 # True: output Gaussian model
 FigGauMod = True
 
@@ -772,7 +772,7 @@ if myrank == 0:
                 c='cyan', marker = marker)
             #        c='w', s = 100*gauxd_amp_FRVS[0,sindx,ii], marker = marker)
     ax1.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
-    ax1.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+    ax1.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
     ax1.tick_params(labelsize=16, color='k')
     ax1.set_yticks(vrotticks)
 
@@ -801,7 +801,7 @@ if myrank == 0:
                 c='cyan', marker = marker)
             #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
     ax2.text(labpos[0], labpos[1], r'F', fontsize=16, color='w')
-    ax2.set_ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+    ax2.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
     ax2.tick_params(labelsize=16, color='k')
     ax2.set_yticks(vrotticks)
 
@@ -832,8 +832,8 @@ if myrank == 0:
     ax3.text(labpos[0], labpos[1], r'A', fontsize=16, color='w')
     ax3.tick_params(labelsize=16, color='k')
     ax3.set_yticks(vrotticks)
-    plt.xlabel(r"R$_{\rm gal}$ (kpc)", fontsize=18)
-    plt.ylabel(r"V$_{\rm rot}$$-$V$_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+    plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
+    plt.ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
     f.subplots_adjust(hspace=0.0, right = 0.8)
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
@@ -868,7 +868,7 @@ if myrank == 0:
             ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[1,sindx,ii], \
                 c='cyan', marker = marker)
     ax1.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
-    ax1.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+    ax1.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
     ax1.tick_params(labelsize=16, color='k')
     ax1.set_yticks(vzticks)
 
@@ -895,7 +895,7 @@ if myrank == 0:
             ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[1,sindx,ii], \
                  c='cyan', marker = marker)
     ax2.text(labpos[0], labpos[1], r'F', fontsize=16, color='w')
-    ax2.set_ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+    ax2.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
     ax2.tick_params(labelsize=16, color='k')
     ax2.set_yticks(vzticks)
 
@@ -924,8 +924,8 @@ if myrank == 0:
     ax3.text(labpos[0], labpos[1], r'A', fontsize=16, color='w')
     ax3.tick_params(labelsize=16, color='k')
     ax3.set_yticks(vzticks)
-    plt.xlabel(r"R$_{\rm z}$ (kpc)", fontsize=18)
-    plt.ylabel(r"V$_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+    plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
+    plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
     f.subplots_adjust(hspace=0.0, right = 0.8)
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
