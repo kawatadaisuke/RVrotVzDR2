@@ -20,9 +20,9 @@ from galpy.util import bovy_coords
 
 # flags
 # 0: A star, otherwise: F star
-flagAF = 0
+flagAF = 1
 # 0: l=0, otherwise: l=180
-flagglon = 0
+flagglon = 1
 
 # constant for proper motion unit conversion
 pmvconst = 4.74047
@@ -165,7 +165,7 @@ Tvxvyvz = bovy_coords.vrpmllpmbb_to_vxvyvz(hrvs_obs, Tpmllpmbb[:,0], \
           Tpmllpmbb[:,1], glons, glats, dists_obs, XYZ=False, degree=True)
 vxs_obs = Tvxvyvz[:,0]
 vys_obs = Tvxvyvz[:,1]
-vzs_obs = Tvxvyvz[:,2]
+vzs_obs = Tvxvyvz[:,2]+wsun
 # Galactocentric position and velcoity
 distxys_obs = dists_obs*np.cos(glatrads)
 xpos_obs = distxys_obs*np.cos(glonrads)
@@ -180,24 +180,13 @@ rgals_obs = np.sqrt(xposgals_obs**2+yposgals_obs**2)
 vrots_obs = (vxgals_obs*yposgals_obs-vygals_obs*xposgals_obs)/rgals_obs
 vrads_obs = (vxgals_obs*xposgals_obs+vygals_obs*yposgals_obs)/rgals_obs
 
-# linear regression of vrots vs. vlons
-# true
-slope_true, intercept_true, r_value, p_value, std_err = \
-    stats.linregress(vrots_obs, vlons_obs)
-print 'true slope, intercept=',slope_true, intercept_true
-vrotres_true=vlons_true-(intercept_true+slope_true*vrots_true)
-# obs
-slope_obs, intercept_obs, r_value, p_value, std_err = \
-    stats.linregress(vrots_obs, vlons_obs)
-print 'obs slope, intercept=',slope_obs,intercept_obs
-vrotres_obs=vlons_obs-(intercept_obs+slope_obs*vrots_obs)
-
-print ' std error for Vlon obs =',np.std(vlons_true-vlons_obs)
-print ' dispersion of vrot/vlon true, obs = ', \
-    vrotres_true.std(), vrotres_obs.std()
-print ' std error for Vlat obs =',np.std(vlats_true-vlats_obs)
-print ' dispersion of vz/vlat obs = ', \
-    np.std(vzs_obs-vlats_obs)
+# approximate vrot from vlon
+vrotlons_obs =  np.copy(vlons_obs)
+vrotlons_obs[np.logical_or(glons<90, glons>270)] = \
+    vlons_obs[np.logical_or(glons<90, glons>270)]+vsun
+vrotlons_obs[np.logical_and(glons>=90, glons<=270)] = \
+    -vlons_obs[np.logical_and(glons>=90, glons<=270)]+vsun
+vzlats_obs = np.copy(vlats_obs)+wsun
 
 angs=np.copy(glons)
 if flagglon == 0:
@@ -205,46 +194,127 @@ if flagglon == 0:
     angs[glons>180.0]=angs[glons>180.0]-360.0
 else:
     # for l= 180 case
-    angs=np.abs(glons-180.0)
+    angs=glons-180.0
 
-anglimlow = 0.0
-anglimhigh = 2.0
-dang = 2.0
-for i in range(5):
-    sindx = np.where((np.fabs(angs)>=anglimlow) & (np.fabs(angs)<anglimhigh))
-    slope, intercept, r_value, p_value, std_err = \
-        stats.linregress(vrots_obs[sindx], vlons_obs[sindx])
-    print ' |l| range = ', anglimlow, anglimhigh
-    print ' distpersion vrot/vron, vz/vlat=', \
-        np.std(vlons_obs[sindx]-(intercept+slope*vrots_obs[sindx])), \
-        np.std(vzs_obs[sindx]-vlats_obs[sindx])
-    anglimlow += dang
-    anglimhigh += dang
+# linear regression of vrots vs. vlons
+# obs
+# vrotres_obs=vlons_obs-(intercept_obs+slope_obs*vrots_obs)
+vrotres_obs=vrotlons_obs-vrots_obs
+# linear regression of vrotles vs. angs
+slope_obs, intercept_obs, r_value, p_value, std_err = \
+    stats.linregress(angs, vrotres_obs)
+print 'obs slope, intercept DVrot vs. l=',slope_obs,intercept_obs
+# vrotres_obs=vlons_obs-(intercept_obs+slope_obs*vrots_obs)
+vzres_obs=vzlats_obs-vzs_obs
+# linear regression of vzres vs. angs
+slope_obs, intercept_obs, r_value, p_value, std_err = \
+    stats.linregress(angs,vzres_obs)
+print 'obs slope, intercept DVz vs. l=',slope_obs,intercept_obs
+slope_obs, intercept_obs, r_value, p_value, std_err = \
+    stats.linregress(angs[plxs_obs>1.0/2.0], vrotres_obs[plxs_obs>1.0/2.0])
+print 'd<2 kpc, obs slope, intercept DVz vs. l=',slope_obs,intercept_obs
+slope_obs, intercept_obs, r_value, p_value, std_err = \
+    stats.linregress(angs[plxs_obs<1.0/2.0], vrotres_obs[plxs_obs<1.0/2.0])
+print 'd>2 kpc, obs slope, intercept DVz vs. l=',slope_obs,intercept_obs
 
-f=open('star_true_obs.asc','w')
+print ' std error for Vlon obs =',np.std(vlons_true-vlons_obs)
+print ' mean and dispersion of vrot/vlon = ', vrotres_obs.mean(), \
+    vrotres_obs.std()
+print ' std error for Vlat obs =',np.std(vlats_true-vlats_obs)
+print ' mean and dispersion of vz/vlat obs = ',vzres_obs.mean(), \
+    vzres_obs.std()
+
+dang = 1.0
+nang = 20
+ndis = 3
+angbin = np.zeros(nang)
+vrotres_ang_mean = np.zeros((ndis,nang))
+vzres_ang_mean = np.zeros((ndis,nang))
+vrotres_ang_std = np.zeros((ndis,nang))
+vzres_ang_std = np.zeros((ndis,nang))
+
+distlim = 2.0
+
+for idis in range(ndis):
+    filename = 'dvrotdvzglon'+str(flagglon)+'samp'+str(flagAF)+'d'+ \
+        str(idis)+'.asc'
+    f=open(filename,'w')
+    anglimlow = -10.0
+    anglimhigh = -9.0
+    for ii in range(nang):
+        angbin[ii] = 0.5*(anglimlow+anglimhigh)
+        if idis == 0:
+            sindx = np.where((angs>=anglimlow) & (angs<anglimhigh))
+        elif idis == 1:
+            sindx = np.where((angs>=anglimlow) & (angs<anglimhigh) & \
+            (plxs_obs>1.0/distlim))
+        else:
+            sindx = np.where((angs>=anglimlow) & (angs<anglimhigh) & \
+            (plxs_obs<1.0/distlim))
+
+        vrotres_ang_mean[idis,ii] = np.mean(vrotres_obs[sindx])
+        vrotres_ang_std[idis,ii] = np.std(vrotres_obs[sindx])
+        vzres_ang_mean[idis,ii] = np.mean(vzres_obs[sindx])
+        vzres_ang_std[idis,ii] = np.std(vzres_obs[sindx])
+        print >>f, "%f %f %f %f %f %d" %(angbin[ii], \
+            vrotres_ang_mean[idis,ii], \
+            vrotres_ang_std[idis,ii],vzres_ang_mean[idis,ii], \
+            vzres_ang_std[idis,ii],len(vrotres_obs[sindx]))
+        anglimlow += dang
+        anglimhigh += dang
+f.close()
+
+filename = 'star_true_obs_glon'+str(flagglon)+'samp'+str(flagAF)+'.asc'
+
+f=open(filename,'w')
 for i in range(nstars):
-    print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
+    print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
     %(xpos_true[i], ypos_true[i], zpos_true[i], \
       rgals_true[i], xpos_obs[i], ypos_obs[i], \
       zpos_obs[i], rgals_obs[i], vlons_true[i], \
       vlats_true[i], vrots_true[i], vrads_true[i], \
       vzs_true[i], vlons_obs[i], vlats_obs[i], \
       vzs_obs[i], vrots_obs[i], vrads_obs[i], \
-      angs[i], glats[i], vrotres_true[i], \
-      vrotres_obs[i])
+      angs[i], glats[i], vrotlons_obs[i])
 f.close()
 
-# plot x-y map
-plt.scatter(angs, vrotres_obs, c=angs)
+# plot mean trend
+plt.errorbar(angbin, vrotres_ang_mean[0,:], yerr=vrotres_ang_std[0,:], color='b')
+plt.errorbar(angbin, vrotres_ang_mean[1,:], yerr=vrotres_ang_std[1,:], color='r')
+plt.errorbar(angbin, vrotres_ang_mean[2,:], yerr=vrotres_ang_std[2,:], color='y')
+# linear fit
+# slope_obs, intercept_obs, r_value, p_value, std_err = \
+#    stats.linregress(angs, vrotres_obs)
+# print 'obs slope, intercept DVrot vs. l=',slope_obs,intercept_obs
+# xs = np.array([-10.0, 10.0])
+# ys = slope_obs*xs+intercept_obs
+# plt.plot(xs,ys)
+p = np.polyfit(angs,vrotres_obs,3)
+print ' n=3 polyfit p=',p
+xs = np.linspace(-10.0, 10.0, 100)
+ys = p[0]*xs**3+p[1]*xs**2+p[2]*xs+p[0]
+plt.plot(xs,ys)
 plt.xlabel(r"Angle (deg)", fontsize=18, fontname="serif")
-plt.ylabel(r"\gD (Vlon-Vrot) (km/s)", fontsize=18, fontname="serif")
+plt.ylabel(r" dVrot (km/s)", fontsize=18, fontname="serif")
+plt.grid(True)
+plt.show()
+plt.errorbar(angbin, vzres_ang_mean[0,:], yerr=vzres_ang_std[0,:], color='r')
+plt.xlabel(r"Angle (deg)", fontsize=18, fontname="serif")
+plt.ylabel(r" dVz (km/s)", fontsize=18, fontname="serif")
+plt.grid(True)
+plt.show()
+
+# plot x-y map
+plt.scatter(angs, vrotres_obs, c=angs, marker='.')
+plt.xlabel(r"Angle (deg)", fontsize=18, fontname="serif")
+plt.ylabel(r"d (Vlon-Vrot) (km/s)", fontsize=18, fontname="serif")
 # plt.axis([-1.0,1.0,-1.0,1.0],'scaled')
 cbar=plt.colorbar()
 cbar.set_label(r'angs')
 plt.show()
 
 # plot R vs. vrot
-plt.scatter(rgals_obs, vrots_obs, c=ages_true)
+plt.scatter(rgals_obs, vrots_obs, c=ages_true, marker='.')
 plt.xlabel(r"Rgal (kpc)", fontsize=18, fontname="serif")
 plt.ylabel(r"Vrot (km/s)", fontsize=18, fontname="serif")
 # plt.axis([-1.0,1.0,-1.0,1.0],'scaled')
