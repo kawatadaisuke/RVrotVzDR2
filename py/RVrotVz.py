@@ -32,8 +32,10 @@ myrank = comm.Get_rank()
 # flags
 # True: MC sampling on
 MCsample = True
+# True: read star_error*.npy
+FileErrors = False
 # True: read gaussxd*.asc
-FileGauXD = True
+FileGauXD = False
 # True: output Gaussian model
 FigGauMod = True
 
@@ -69,307 +71,336 @@ nsample = 3
 
 # for isamp in range(nsample):
 for isamp in range(nsample):
-    # input data
-    if isamp == 0:
-        # Bright F stars with RVS data
-        infile = 'galaxia_gaia_V13.fits'
-        star_hdus = pyfits.open(infile)
-        star = star_hdus[1].data
-        star_hdus.close()
+    if FileErrors == False:
+        # read the data and compute errors
+        # input data
+        if isamp == 0:
+            # Bright F stars with RVS data
+            infile = 'galaxia_gaia_V13.fits'
+            star_hdus = pyfits.open(infile)
+            star = star_hdus[1].data
+            star_hdus.close()
+        elif isamp == 1:
+            infilel0 = 'galaxia_gaia_l0.fits'
+            starl0 = pyfits.open(infilel0)
+            infilel180 = 'galaxia_gaia_l180.fits'
+            starl180 = pyfits.open(infilel180)
+            nrowsl0 = starl0[1].data.shape[0]
+            nrowsl180 = starl180[1].data.shape[0]
+            nrows = nrowsl0 + nrowsl180
+            star_hdu = pyfits.BinTableHDU.from_columns(starl0[1].columns, nrows=nrows)
+            for colname in starl0[1].columns.names:
+                star_hdu.data[colname][nrowsl0:] = starl180[1].data[colname]
+            star = star_hdu.data
+            starl0.close()
+            starl180.close()
 
-    elif isamp == 1:
-        infilel0 = 'galaxia_gaia_l0.fits'
-        starl0 = pyfits.open(infilel0)
-        infilel180 = 'galaxia_gaia_l180.fits'
-        starl180 = pyfits.open(infilel180)
-        nrowsl0 = starl0[1].data.shape[0]
-        nrowsl180 = starl180[1].data.shape[0]
-        nrows = nrowsl0 + nrowsl180
-        star_hdu = pyfits.BinTableHDU.from_columns(starl0[1].columns, nrows=nrows)
-        for colname in starl0[1].columns.names:
-            star_hdu.data[colname][nrowsl0:] = starl180[1].data[colname]
-        star = star_hdu.data
-        starl0.close()
-        starl180.close()
-
-    if myrank == 0:
-        print ' number of stars read=', len(star['Plx_obs'])
-
-    # assume Av_obs~AG_obs for Galaxia
-    gabsmag = star['G_obs']-(5.0*np.log10(100.0/np.fabs(star['Plx_obs'])))+star['Av_obs']
-    zabs = np.fabs((1.0/star['Plx_obs']) \
-          *np.sin(np.pi*star['GLAT_true']/180.0)+zsun)
-    yabs = np.fabs((1.0/star['Plx_obs']) \
-          *np.sin(np.pi*star['GLON_true']/180.0))
-    # sindx=np.where((zabs<zmaxlim) & np.logical_or(star['GLON_true']<90.0,star['GLON_true']>270.0))
-
-    if isamp == 0:
         if myrank == 0:
-            print ' for bright F stars with RVS'  
-        Tefflow = 6600.0
-        Teffhigh = 6900.0
-    elif isamp == 1: 
-        if myrank == 0:
-            print ' for faint F stars'  
-        Tefflow = 6600.0
-        Teffhigh = 7330.0
-    elif isamp == 2:
-        if myrank == 0:
-            print ' for A stars'
-        Tefflow = 7330.0
-        Teffhigh = 10000.0
+            print isamp,' sample number of stars =', len(star['Plx_obs'])
 
-    # minimum distance limit
-    distmin = 0.0000000001
+        # assume Av_obs~AG_obs for Galaxia
+        gabsmag = star['G_obs']-(5.0*np.log10(100.0/np.fabs(star['Plx_obs'])))+star['Av_obs']
+        zabs = np.fabs((1.0/star['Plx_obs']) \
+            *np.sin(np.pi*star['GLAT_true']/180.0)+zsun)
+        yabs = np.fabs((1.0/star['Plx_obs']) \
+            *np.sin(np.pi*star['GLON_true']/180.0))
+        # sindx=np.where((zabs<zmaxlim) & np.logical_or(star['GLON_true']<90.0,star['GLON_true']>270.0))
+        if isamp == 0:
+            if myrank == 0:
+                print ' for bright F stars with RVS'  
+            Tefflow = 6600.0
+            Teffhigh = 6900.0
+        elif isamp == 1: 
+            if myrank == 0:
+                print ' for faint F stars'  
+            Tefflow = 6600.0
+            Teffhigh = 7330.0
+        elif isamp == 2:
+            if myrank == 0:
+                print ' for A stars'
+            Tefflow = 7330.0
+            Teffhigh = 10000.0
 
-    sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
+        # minimum distance limit
+        distmin = 0.0000000001
+
+        sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
                  (gabsmag > -(2.5/4000.0)*(star['Teff_obs']-6000.0)+1.0) &
                  (star['Plx_obs']>0.0) & (star['Plx_obs']<1.0/distmin) & 
                  (star['e_Plx']/star['Plx_obs']<e_plxlim) & 
                  (star['Teff_obs']>Tefflow) & (star['Teff_obs']<Teffhigh))
-    nstars = len(star['RA_obs'][sindx])
+        nstars = len(star['RA_obs'][sindx])
 
-    if myrank == 0:
-        print ' N selected=',nstars
-    # extract the stellar data
-    ras = star['RA_obs'][sindx]
-    decs = star['DEC_obs'][sindx]
-    glons = star['GLON_true'][sindx]
-    glats = star['GLAT_true'][sindx]
-    plxs_obs = star['Plx_obs'][sindx]
-    pmras_obs = star['pmRA_obs'][sindx]
-    pmdecs_obs = star['pmDEC_obs'][sindx]
-    e_plxs = star['e_Plx'][sindx]
-    e_pmras = star['e_pmRA'][sindx]
-    e_pmdecs = star['e_pmDEC'][sindx]
-    # HRV
-    hrvs_obs = star['HRV_obs'][sindx]
-    e_hrvs = star['e_HRV'][sindx]
-    # G, G_BP, G_RP
-    gmag_obs = star['G_obs'][sindx]
-    gbpmag_obs = star['G_BP_obs'][sindx]
-    grpmag_obs = star['G_RP_obs'][sindx]
-    e_gmag = star['e_G'][sindx]
-    e_gbpmag = star['e_G_BP'][sindx]
-    e_grpmag = star['e_G_RP'][sindx]
-    # Teff
-    teff_obs = star['Teff_obs'][sindx]
-    e_teff = star['e_Teff'][sindx]
-    # Av
-    av_obs = star['Av_obs'][sindx]
-    # error correalation
-    plxpmra_corrs = np.zeros_like(e_plxs) 
-    plxpmdec_corrs = np.zeros_like(e_plxs) 
-    pmradec_corrs = np.zeros_like(e_plxs) 
+        if myrank == 0:
+            print ' N selected=',nstars
+        # extract the stellar data
+        ras = star['RA_obs'][sindx]
+        decs = star['DEC_obs'][sindx]
+        glons = star['GLON_true'][sindx]
+        glats = star['GLAT_true'][sindx]
+        plxs_obs = star['Plx_obs'][sindx]
+        pmras_obs = star['pmRA_obs'][sindx]
+        pmdecs_obs = star['pmDEC_obs'][sindx]
+        e_plxs = star['e_Plx'][sindx]
+        e_pmras = star['e_pmRA'][sindx]
+        e_pmdecs = star['e_pmDEC'][sindx]
+        # HRV
+        hrvs_obs = star['HRV_obs'][sindx]
+        e_hrvs = star['e_HRV'][sindx]
+        # G, G_BP, G_RP
+        gmag_obs = star['G_obs'][sindx]
+        gbpmag_obs = star['G_BP_obs'][sindx]
+        grpmag_obs = star['G_RP_obs'][sindx]
+        e_gmag = star['e_G'][sindx]
+        e_gbpmag = star['e_G_BP'][sindx]
+        e_grpmag = star['e_G_RP'][sindx]
+        # Teff
+        teff_obs = star['Teff_obs'][sindx]
+        e_teff = star['e_Teff'][sindx]
+        # Av
+        av_obs = star['Av_obs'][sindx]
+        # error correalation
+        plxpmra_corrs = np.zeros_like(e_plxs) 
+        plxpmdec_corrs = np.zeros_like(e_plxs) 
+        pmradec_corrs = np.zeros_like(e_plxs) 
 
-    # age [Fe/H] only for Galaxia
-    fehs_true = star['[Fe/H]_true'][sindx]
-    ages_true = star['Age'][sindx]
+        # age [Fe/H] only for Galaxia
+        fehs_true = star['[Fe/H]_true'][sindx]
+        ages_true = star['Age'][sindx]
 
-    # convert deg -> rad
-    glonrads = glons*np.pi/180.0
-    glatrads = glats*np.pi/180.0
+        # convert deg -> rad
+        glonrads = glons*np.pi/180.0
+        glatrads = glats*np.pi/180.0
 
-    # get observed position and velocity
-    dists_obs = 1.0/plxs_obs
+        # get observed position and velocity
+        dists_obs = 1.0/plxs_obs
 
-    # velocity
-    Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
-        pmras_obs, pmdecs_obs, ras, \
-        decs, degree=True, epoch=epoch)
-    pmlons_obs = Tpmllpmbb[:,0]
-    pmlats_obs = Tpmllpmbb[:,1]
-    # mas/yr -> km/s
-    vlons_obs = pmvconst*pmlons_obs*dists_obs
-    vlats_obs = pmvconst*pmlats_obs*dists_obs
-    # galactic position
-    distxys_obs = dists_obs*np.cos(glatrads)
-    xpos_obs = distxys_obs*np.cos(glonrads)
-    ypos_obs = distxys_obs*np.sin(glonrads)
-    zpos_obs = dists_obs*np.sin(glatrads)
-    xposgals_obs = xpos_obs-rsun
-    yposgals_obs = ypos_obs
-    rgals_obs = np.sqrt(xposgals_obs**2+yposgals_obs**2)
-
-    if isamp == 0:
-        Tvxvyvz = bovy_coords.vrpmllpmbb_to_vxvyvz(\
-            hrvs_obs, Tpmllpmbb[:,0], Tpmllpmbb[:,1], \
-            glons, glats, dists_obs, XYZ=False, degree=True)
-        vxs_obs = Tvxvyvz[:,0]
-        vys_obs = Tvxvyvz[:,1]
-        vzs_obs = Tvxvyvz[:,2]+wsun
-        # Galactocentric position and velcoity
-        hrvxys_obs = hrvs_obs*np.cos(glatrads)
-        vxgals_obs = vxs_obs+usun
-        vygals_obs = vys_obs+vsun
-        vrots_obs = (vxgals_obs*yposgals_obs-vygals_obs*xposgals_obs) \
-            /rgals_obs
-        vrads_obs = (vxgals_obs*xposgals_obs+vygals_obs*yposgals_obs) \
-            /rgals_obs
-    else:
-        # approximation
-        vrots_obs = np.copy(vlons_obs)
-        vrots_obs[np.logical_or(glons<90, glons>270)] = \
-            vrots_obs[np.logical_or(glons<90, glons>270)]+vsun
-        vrots_obs[np.logical_and(glons>=90, glons<=270)] = \
-            -vrots_obs[np.logical_and(glons>=90, glons<=270)]+vsun
-        vrads_obs = np.zeros_like(vrots_obs)
-        vzs_obs = np.copy(vlats_obs)+wsun
-
-    # set error zero
-    e_rgals = np.zeros_like(rgals_obs)
-    e_vrots = np.zeros_like(vrads_obs)
-    e_vzs = np.zeros_like(vrads_obs)
-
-    if MCsample == True:
-        # sample from parallax proper motion covariance matrix
-
-        plxpmradec_mc = np.empty((nstars, 3, nmc))
-        plxpmradec_mc[:, 0, :] = np.atleast_2d(plxs_obs).T
-        plxpmradec_mc[:, 1, :] = np.atleast_2d(pmras_obs).T
-        plxpmradec_mc[:, 2, :] = np.atleast_2d(pmdecs_obs).T
-        for ii in range(myrank,nstars,nprocs):
-            # constract covariance matrix
-            tcov = np.zeros((3, 3))
-            # /2 because of symmetrization below
-            tcov[0, 0] = e_plxs[ii]**2.0 / 2.0
-            tcov[1, 1] = e_pmras[ii]**2.0 / 2.0
-            tcov[2, 2] = e_pmdecs[ii]**2.0 / 2.0
-            tcov[0, 1] = plxpmra_corrs[ii] * e_plxs[ii] * e_pmras[ii]
-            tcov[0, 2] = plxpmdec_corrs[ii] * e_plxs[ii] * e_pmdecs[ii]
-            tcov[1, 2] = pmradec_corrs[ii] * e_pmras[ii] * e_pmdecs[ii]
-            # symmetrise
-            tcov = (tcov + tcov.T)
-            # Cholesky decomp.
-            L = np.linalg.cholesky(tcov)
-            plxpmradec_mc[ii] += np.dot(L, np.random.normal(size=(3, nmc)))
-
-        # distribution of velocity and distance.
-        # -> pml pmb
-        ratile = np.tile(ras, (nmc, 1)).flatten()
-        dectile = np.tile(decs, (nmc, 1)).flatten()
-        pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
-            plxpmradec_mc[:, 1, :].T.flatten(), \
-            plxpmradec_mc[:, 2, :].T.flatten(), \
-            ratile, dectile, degree=True, epoch=epoch)
-        # reshape
-        pmllbb_sam = pmllbb_sam.reshape((nmc, nstars, 2))
-        # distance MC sampling
-        plxs_sam = plxpmradec_mc[:, 0, :].T
-        # check negative parallax
-        plxs_samflat= plxs_sam.flatten()
-        copysamflat=np.copy(plxs_samflat)
-        if len(copysamflat[plxs_samflat<plxlim])>0: 
-            print len(copysamflat[plxs_samflat<plxlim]),' plx set to ',plxlim
-        plxs_samflat[copysamflat<plxlim]=plxlim
-        plxs_sam = np.reshape(plxs_samflat,(nmc,nstars))
-        # distance
-        dists_sam = 1.0/plxs_sam
+        # velocity
+        Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
+            pmras_obs, pmdecs_obs, ras, \
+            decs, degree=True, epoch=epoch)
+        pmlons_obs = Tpmllpmbb[:,0]
+        pmlats_obs = Tpmllpmbb[:,1]
         # mas/yr -> km/s
-        vlons_sam = pmvconst*pmllbb_sam[:,:,0]*dists_sam
-        vlats_sam = pmvconst*pmllbb_sam[:,:,1]*dists_sam
+        vlons_obs = pmvconst*pmlons_obs*dists_obs
+        vlats_obs = pmvconst*pmlats_obs*dists_obs
         # galactic position
-        distxys_sam = dists_sam*np.cos(glatrads)
-        xpos_sam = distxys_sam*np.cos(glonrads)
-        ypos_sam = distxys_sam*np.sin(glonrads)
-        zpos_sam = dists_sam*np.sin(glatrads)
-        rgals_sam = np.sqrt((xpos_sam-rsun)**2+ypos_sam**2)
+        distxys_obs = dists_obs*np.cos(glatrads)
+        xpos_obs = distxys_obs*np.cos(glonrads)
+        ypos_obs = distxys_obs*np.sin(glonrads)
+        zpos_obs = dists_obs*np.sin(glatrads)
+        xposgals_obs = xpos_obs-rsun
+        yposgals_obs = ypos_obs
+        rgals_obs = np.sqrt(xposgals_obs**2+yposgals_obs**2)
 
         if isamp == 0:
-            hrvs_sam = np.random.normal(hrvs_obs, e_hrvs, (nmc, nstars))
-            vxvyvz_sam = bovy_coords.vrpmllpmbb_to_vxvyvz( \
-                hrvs_sam.flatten(), pmllbb_sam[:,:,0].flatten(), \
-                pmllbb_sam[:,:,1].flatten(), \
-                np.tile(glons, (nmc, 1)).flatten(), \
-                np.tile(glats, (nmc, 1)).flatten(), \
-                dists_sam.flatten(), degree=True)
-            vxvyvz_sam = vxvyvz_sam.reshape((nmc, nstars, 3))
-            vxs_sam = vxvyvz_sam[:,:,0]
-            vys_sam = vxvyvz_sam[:,:,1]
-            vzs_sam = vxvyvz_sam[:,:,2]+wsun
-            # 2D velocity
-            hrvxys_sam = hrvs_sam*np.cos(glatrads)
-            vxgals_sam = vxs_sam+usun
-            vygals_sam = vys_sam+vsun
-            vrots_sam = (vxgals_sam*ypos_sam-vygals_sam*(xpos_sam-rsun)) \
-                        /rgals_sam
-            vrads_sam = (vxgals_sam*(xpos_sam-rsun)+vygals_sam*ypos_sam) \
-                        /rgals_sam
-            # f = open('mcsample_stars.asc','w')
-            # for j in range(100000,100100):
-            #    for i in range(nmc):
-            #        print >>f, "%d %d %f %f %f %f %f %f" % (i, j, \
-            #            plxs_sam[i,j], plxs_obs[j], \
-            #            rgals_sam[i,j] , rgals_obs[j], \
-            #            vrots_sam[i,j] , vrots_obs[j])
-            # f.close()
+            Tvxvyvz = bovy_coords.vrpmllpmbb_to_vxvyvz(\
+                hrvs_obs, Tpmllpmbb[:,0], Tpmllpmbb[:,1], \
+                glons, glats, dists_obs, XYZ=False, degree=True)
+            vxs_obs = Tvxvyvz[:,0]
+            vys_obs = Tvxvyvz[:,1]
+            vzs_obs = Tvxvyvz[:,2]+wsun
+            # Galactocentric position and velcoity
+            hrvxys_obs = hrvs_obs*np.cos(glatrads)
+            vxgals_obs = vxs_obs+usun
+            vygals_obs = vys_obs+vsun
+            vrots_obs = (vxgals_obs*yposgals_obs-vygals_obs*xposgals_obs) \
+                /rgals_obs
+            vrads_obs = (vxgals_obs*xposgals_obs+vygals_obs*yposgals_obs) \
+                /rgals_obs
         else:
-            vrots_sam = np.copy(vlons_sam)
-            vrots_sam[:,np.logical_or(glons<90, glons>270)] = \
-                vrots_sam[:,np.logical_or(glons<90, glons>270)]+vsun
-            vrots_sam[:,np.logical_and(glons>=90, glons<=270)] = \
-                -vrots_sam[:,np.logical_and(glons>=90, glons<=270)]+vsun
-            vrads_sam = np.zeros_like(vrots_sam)
-            vzs_sam = np.copy(vlats_sam)+wsun
-        # error estimats dispersion (use observed one for mean value)
-        # rgals_obs = np.mean(rgals_sam, axis=0).reshape(nstars)
+            # approximation
+            vrots_obs = np.copy(vlons_obs)
+            vrots_obs[np.logical_or(glons<90, glons>270)] = \
+                vrots_obs[np.logical_or(glons<90, glons>270)]+vsun
+            vrots_obs[np.logical_and(glons>=90, glons<=270)] = \
+                -vrots_obs[np.logical_and(glons>=90, glons<=270)]+vsun
+            vrads_obs = np.zeros_like(vrots_obs)
+            vzs_obs = np.copy(vlats_obs)+wsun
+
+        # set error zero
         e_rgals = np.zeros_like(rgals_obs)
-        e_rgals[range(myrank,nstars,nprocs)] = \
-             np.std(rgals_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
-        # vzs_obs = np.mean(vzs_sam, axis=0).reshape(nstars)
-        e_vzs = np.zeros_like(vzs_obs)
-        e_vzs[range(myrank,nstars,nprocs)] = \
-            np.std(vzs_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
-        # vrots_obs = np.mean(vrots_sam, axis=0).reshape(nstars)
-        e_vrots = np.zeros_like(vrots_obs)
-        e_vrots[range(myrank,nstars,nprocs)] = \
-            np.std(vrots_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
-        # position
-        # xpos_obs = np.mean(xpos_sam, axis=0).reshape(nstars)
-        # ypos_obs = np.mean(ypos_sam, axis=0).reshape(nstars)
-        # zpos_obs = np.mean(zpos_sam, axis=0).reshape(nstars)
-        # dists_obs = np.mean(dists_sam, axis=0).reshape(nstars)
-        # vrads_obs = np.mean(vrads_sam, axis=0).reshape(nstars)
-        if nprocs > 1:
-            # MPI
-            # e_rgals
-            ncom = len(e_rgals)
-            sendbuf = np.zeros(ncom,dtype=np.float64)
-            sendbuf = e_rgals
-            recvbuf = np.zeros(ncom,dtype=np.float64)
-            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
-            e_rgals = recvbuf
-            # e_vzs
-            sendbuf = np.zeros(ncom,dtype=np.float64)
-            sendbuf = e_vzs
-            recvbuf = np.zeros(ncom,dtype=np.float64)
-            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
-            e_vzs = recvbuf
-            # e_vrots
-            sendbuf = np.zeros(ncom,dtype=np.float64)
-            sendbuf = e_vrots
-            recvbuf = np.zeros(ncom,dtype=np.float64)
-            comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
-            e_vrots = recvbuf
+        e_vrots = np.zeros_like(vrads_obs)
+        e_vzs = np.zeros_like(vrads_obs)
 
-    # Vrot defined w.r.t. solar velocity
-    vrots_obs -= vcircsun
-    if MCsample == True:
-        vrots_sam -= vcircsun
+        if MCsample == True:
+            # sample from parallax proper motion covariance matrix
+            plxpmradec_mc = np.empty((nstars, 3, nmc))
+            plxpmradec_mc[:, 0, :] = np.atleast_2d(plxs_obs).T
+            plxpmradec_mc[:, 1, :] = np.atleast_2d(pmras_obs).T
+            plxpmradec_mc[:, 2, :] = np.atleast_2d(pmdecs_obs).T
+            for ii in range(myrank,nstars,nprocs):
+                # constract covariance matrix
+                tcov = np.zeros((3, 3))
+                # /2 because of symmetrization below
+                tcov[0, 0] = e_plxs[ii]**2.0 / 2.0
+                tcov[1, 1] = e_pmras[ii]**2.0 / 2.0
+                tcov[2, 2] = e_pmdecs[ii]**2.0 / 2.0
+                tcov[0, 1] = plxpmra_corrs[ii] * e_plxs[ii] * e_pmras[ii]
+                tcov[0, 2] = plxpmdec_corrs[ii] * e_plxs[ii] * e_pmdecs[ii]
+                tcov[1, 2] = pmradec_corrs[ii] * e_pmras[ii] * e_pmdecs[ii]
+                # symmetrise
+                tcov = (tcov + tcov.T)
+                # Cholesky decomp.
+                L = np.linalg.cholesky(tcov)
+                plxpmradec_mc[ii] += np.dot(L, np.random.normal(size=(3, nmc)))
 
-    if myrank == 0:
+            # distribution of velocity and distance.
+            # -> pml pmb
+            ratile = np.tile(ras, (nmc, 1)).flatten()
+            dectile = np.tile(decs, (nmc, 1)).flatten()
+            pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
+                plxpmradec_mc[:, 1, :].T.flatten(), \
+                plxpmradec_mc[:, 2, :].T.flatten(), \
+                ratile, dectile, degree=True, epoch=epoch)
+            # reshape
+            pmllbb_sam = pmllbb_sam.reshape((nmc, nstars, 2))
+            # distance MC sampling
+            plxs_sam = plxpmradec_mc[:, 0, :].T
+            # check negative parallax
+            plxs_samflat= plxs_sam.flatten()
+            copysamflat=np.copy(plxs_samflat)
+            if len(copysamflat[plxs_samflat<plxlim])>0: 
+                print len(copysamflat[plxs_samflat<plxlim]),' plx set to ',plxlim
+            plxs_samflat[copysamflat<plxlim]=plxlim
+            plxs_sam = np.reshape(plxs_samflat,(nmc,nstars))
+            # distance
+            dists_sam = 1.0/plxs_sam
+            # mas/yr -> km/s
+            vlons_sam = pmvconst*pmllbb_sam[:,:,0]*dists_sam
+            vlats_sam = pmvconst*pmllbb_sam[:,:,1]*dists_sam
+            # galactic position
+            distxys_sam = dists_sam*np.cos(glatrads)
+            xpos_sam = distxys_sam*np.cos(glonrads)
+            ypos_sam = distxys_sam*np.sin(glonrads)
+            zpos_sam = dists_sam*np.sin(glatrads)
+            rgals_sam = np.sqrt((xpos_sam-rsun)**2+ypos_sam**2)
+
+            if isamp == 0:
+                hrvs_sam = np.random.normal(hrvs_obs, e_hrvs, (nmc, nstars))
+                vxvyvz_sam = bovy_coords.vrpmllpmbb_to_vxvyvz( \
+                    hrvs_sam.flatten(), pmllbb_sam[:,:,0].flatten(), \
+                    pmllbb_sam[:,:,1].flatten(), \
+                    np.tile(glons, (nmc, 1)).flatten(), \
+                    np.tile(glats, (nmc, 1)).flatten(), \
+                    dists_sam.flatten(), degree=True)
+                vxvyvz_sam = vxvyvz_sam.reshape((nmc, nstars, 3))
+                vxs_sam = vxvyvz_sam[:,:,0]
+                vys_sam = vxvyvz_sam[:,:,1]
+                vzs_sam = vxvyvz_sam[:,:,2]+wsun
+                # 2D velocity
+                hrvxys_sam = hrvs_sam*np.cos(glatrads)
+                vxgals_sam = vxs_sam+usun
+                vygals_sam = vys_sam+vsun
+                vrots_sam = (vxgals_sam*ypos_sam-vygals_sam*(xpos_sam-rsun)) \
+                        /rgals_sam
+                vrads_sam = (vxgals_sam*(xpos_sam-rsun)+vygals_sam*ypos_sam) \
+                        /rgals_sam
+                # f = open('mcsample_stars.asc','w')
+                # for j in range(100000,100100):
+                #    for i in range(nmc):
+                #        print >>f, "%d %d %f %f %f %f %f %f" % (i, j, \
+                #            plxs_sam[i,j], plxs_obs[j], \
+                #            rgals_sam[i,j] , rgals_obs[j], \
+                #            vrots_sam[i,j] , vrots_obs[j])
+                # f.close()
+            else:
+                vrots_sam = np.copy(vlons_sam)
+                vrots_sam[:,np.logical_or(glons<90, glons>270)] = \
+                    vrots_sam[:,np.logical_or(glons<90, glons>270)]+vsun
+                vrots_sam[:,np.logical_and(glons>=90, glons<=270)] = \
+                    -vrots_sam[:,np.logical_and(glons>=90, glons<=270)]+vsun
+                vrads_sam = np.zeros_like(vrots_sam)
+                vzs_sam = np.copy(vlats_sam)+wsun
+
+            # error estimats dispersion (use observed one for mean value)
+            # rgals_obs = np.mean(rgals_sam, axis=0).reshape(nstars)
+            e_rgals = np.zeros_like(rgals_obs)
+            e_rgals[range(myrank,nstars,nprocs)] = \
+                np.std(rgals_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
+            # vzs_obs = np.mean(vzs_sam, axis=0).reshape(nstars)
+            e_vzs = np.zeros_like(vzs_obs)
+            e_vzs[range(myrank,nstars,nprocs)] = \
+                np.std(vzs_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
+            # vrots_obs = np.mean(vrots_sam, axis=0).reshape(nstars)
+            e_vrots = np.zeros_like(vrots_obs)
+            e_vrots[range(myrank,nstars,nprocs)] = \
+                np.std(vrots_sam, axis=0).reshape(nstars)[range(myrank,nstars,nprocs)]
+            # position
+            # xpos_obs = np.mean(xpos_sam, axis=0).reshape(nstars)
+            # ypos_obs = np.mean(ypos_sam, axis=0).reshape(nstars)
+            # zpos_obs = np.mean(zpos_sam, axis=0).reshape(nstars)
+            # dists_obs = np.mean(dists_sam, axis=0).reshape(nstars)
+            # vrads_obs = np.mean(vrads_sam, axis=0).reshape(nstars)
+            if nprocs > 1:
+                # MPI
+                # e_rgals
+                ncom = len(e_rgals)
+                sendbuf = np.zeros(ncom,dtype=np.float64)
+                sendbuf = e_rgals
+                recvbuf = np.zeros(ncom,dtype=np.float64)
+                comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+                e_rgals = recvbuf
+                # e_vzs
+                sendbuf = np.zeros(ncom,dtype=np.float64)
+                sendbuf = e_vzs
+                recvbuf = np.zeros(ncom,dtype=np.float64)
+                comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+                e_vzs = recvbuf
+                # e_vrots
+                sendbuf = np.zeros(ncom,dtype=np.float64)
+                sendbuf = e_vrots
+                recvbuf = np.zeros(ncom,dtype=np.float64)
+                comm.Allreduce(sendbuf,recvbuf,op=MPI.SUM)
+                e_vrots = recvbuf
+
+        # Vrot defined w.r.t. solar velocity
+        vrots_obs -= vcircsun
+        if MCsample == True:
+            vrots_sam -= vcircsun
+
+        if myrank == 0:
+            if isamp == 0:
+                f=open('star_RVrotVz_FRVS.asc','w')
+            elif isamp == 1:
+                f=open('star_RVrotVz_FF.asc','w')
+            else:
+                f=open('star_RVrotVz_A.asc','w')
+            for i in range(nstars):
+                print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
+                    %(xpos_obs[i], ypos_obs[i], zpos_obs[i], rgals_obs[i], vrots_obs[i], \
+                    vrads_obs[i], vzs_obs[i], dists_obs[i], glons[i], glats[i], \
+                    fehs_true[i], ages_true[i], e_rgals[i], e_vrots[i], e_vzs[i])
+            f.close()
+            # save numpy data
+            if isamp == 0:
+                f=np.savez('star_RVrotVzerror_FRVS.npz',rgals_obs=rgals_obs, \
+                    vrots_obs=vrots_obs,vzs_obs=vzs_obs,
+                    e_rgals=e_rgals, e_vrots=e_vrots, e_vzs=e_vzs )
+            elif isamp == 1:
+                f=np.savez('star_RVrotVzerror_FF.npz',rgals_obs=rgals_obs, \
+                    vrots_obs=vrots_obs,vzs_obs=vzs_obs,
+                    e_rgals=e_rgals, e_vrots=e_vrots, e_vzs=e_vzs )
+            else:
+                f=np.savez('star_RVrotVzerror_A.npz',rgals_obs=rgals_obs, \
+                    vrots_obs=vrots_obs,vzs_obs=vzs_obs,
+                    e_rgals=e_rgals, e_vrots=e_vrots, e_vzs=e_vzs )
+
+
+    else:
+        # read the error files
         if isamp == 0:
-            f=open('star_RVrotVz_FRVS.asc','w')
+            rdata = np.load('star_RVrotVzerror_FRVS.npz')
         elif isamp == 1:
-            f=open('star_RVrotVz_FF.asc','w')
+            rdata = np.load('star_RVrotVzerror_FF.npz')
         else:
-            f=open('star_RVrotVz_A.asc','w')
-        for i in range(nstars):
-            print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
-              %(xpos_obs[i], ypos_obs[i], zpos_obs[i], rgals_obs[i], vrots_obs[i], \
-                vrads_obs[i], vzs_obs[i], dists_obs[i], glons[i], glats[i], \
-                fehs_true[i], ages_true[i], e_rgals[i], e_vrots[i], e_vzs[i])
-        f.close()
+            rdata = np.load('star_RVrotVzerror_A.npz')
+        rgals_obs = rdata['rgals_obs']
+        vrots_obs = rdata['vrots_obs']
+        vzs_obs = rdata['vzs_obs']
+        e_rgals = rdata['e_rgals']
+        e_vrots = rdata['e_vrots']
+        e_vzs = rdata['e_vzs']
 
     # output velocity dispersion of the sample
     if myrank == 0:
