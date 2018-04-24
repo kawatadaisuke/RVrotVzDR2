@@ -12,6 +12,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
+from matplotlib import patches
 from scipy import stats
 from scipy import optimize
 import scipy.interpolate
@@ -801,6 +802,10 @@ if myrank == 0:
                 c='cyan', marker = marker)
             #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
     ax2.text(labpos[0], labpos[1], r'F', fontsize=16, color='w')
+    # draw parallelogram 
+    xsp = np.array([6.0,  6.0,  9.0,  9.0,   6.0])
+    ysp = np.array([30.0,10.0,-30.0, -10.0, 30.0])
+    ax2.plot(xsp,ysp,color='w')
     ax2.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
     ax2.tick_params(labelsize=16, color='k')
     ax2.set_yticks(vrotticks)
