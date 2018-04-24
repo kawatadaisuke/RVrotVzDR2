@@ -38,6 +38,8 @@ FileErrors = False
 FileGauXD = False
 # True: output Gaussian model
 FigGauMod = True
+# flagGalaxia if False, assume the real Gaia data
+flagGalaxia = True
 
 if FileGauXD == True:
     MCsample = False
@@ -48,13 +50,23 @@ nmc = 100
 epoch = 2000.0
 # constant for proper motion unit conversion
 pmvconst = 4.74047
-usun = 11.1
-vsun = 239.08
-wsun = 7.25
-# circular velocity at Rsun, p.8 of Sharma et al. (2011)
-vcircsun = 226.84
-rsun = 8.0
-zsun = 0.015
+if flagGalaxia == True:
+    # circular velocity at Rsun, p.8 of Sharma et al. (2011)
+    usun = 11.1
+    vsun = 239.08
+    wsun = 7.25
+    vcircsun = 226.84
+    rsun = 8.0
+    zsun = 0.015
+else:
+    # from Bland-Hawthorn & Gerhard
+    usun = 10.0
+    vsun = 248.0
+    wsun = 7.0
+    vcircsun = 248.0-11.0
+    rsun = 8.2
+    zsun = 0.025
+
 
 # condition to select stars 
 e_plxlim = 0.15
@@ -76,14 +88,14 @@ for isamp in range(nsample):
         # input data
         if isamp == 0:
             # Bright F stars with RVS data
-            infile = 'galaxia_gaia_V13.fits'
+            infile = 'galaxia_gaiadr2_V13.fits'
             star_hdus = pyfits.open(infile)
             star = star_hdus[1].data
             star_hdus.close()
         elif isamp == 1:
-            infilel0 = 'galaxia_gaia_l0.fits'
+            infilel0 = 'galaxia_gaiadr2_l0.fits'
             starl0 = pyfits.open(infilel0)
-            infilel180 = 'galaxia_gaia_l180.fits'
+            infilel180 = 'galaxia_gaiadr2_l180.fits'
             starl180 = pyfits.open(infilel180)
             nrowsl0 = starl0[1].data.shape[0]
             nrowsl180 = starl180[1].data.shape[0]
@@ -96,14 +108,16 @@ for isamp in range(nsample):
             starl180.close()
 
         if myrank == 0:
-            print isamp,' sample number of stars =', len(star['Plx_obs'])
+            print isamp,' sample number of stars =', len(star['parallax'])
 
         # assume Av_obs~AG_obs for Galaxia
-        gabsmag = star['G_obs']-(5.0*np.log10(100.0/np.fabs(star['Plx_obs'])))+star['Av_obs']
-        zabs = np.fabs((1.0/star['Plx_obs']) \
-            *np.sin(np.pi*star['GLAT_true']/180.0)+zsun)
-        yabs = np.fabs((1.0/star['Plx_obs']) \
-            *np.sin(np.pi*star['GLON_true']/180.0))
+        gabsmag = star['phot_g_mean_mag'] \
+            -(5.0*np.log10(100.0/np.fabs(star['parallax']))) \
+            +star['a_g_val']
+        zabs = np.fabs((1.0/star['parallax']) \
+            *np.sin(np.pi*star['b']/180.0)+zsun)
+        yabs = np.fabs((1.0/star['parallax']) \
+            *np.sin(np.pi*star['l']/180.0))
         # sindx=np.where((zabs<zmaxlim) & np.logical_or(star['GLON_true']<90.0,star['GLON_true']>270.0))
         if isamp == 0:
             if myrank == 0:
@@ -125,48 +139,55 @@ for isamp in range(nsample):
         distmin = 0.0000000001
 
         sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
-                 (gabsmag > -(2.5/4000.0)*(star['Teff_obs']-6000.0)+1.0) &
-                 (star['Plx_obs']>0.0) & (star['Plx_obs']<1.0/distmin) & 
-                 (star['e_Plx']/star['Plx_obs']<e_plxlim) & 
-                 (star['Teff_obs']>Tefflow) & (star['Teff_obs']<Teffhigh))
-        nstars = len(star['RA_obs'][sindx])
+                 (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
+                 (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
+                 (star['parallax_error']/star['parallax']<e_plxlim) & 
+                 (star['teff_val']>Tefflow) & (star['teff_val']<Teffhigh))
+        nstars = len(star['ra'][sindx])
 
         if myrank == 0:
             print ' N selected=',nstars
         # extract the stellar data
-        ras = star['RA_obs'][sindx]
-        decs = star['DEC_obs'][sindx]
-        glons = star['GLON_true'][sindx]
-        glats = star['GLAT_true'][sindx]
-        plxs_obs = star['Plx_obs'][sindx]
-        pmras_obs = star['pmRA_obs'][sindx]
-        pmdecs_obs = star['pmDEC_obs'][sindx]
-        e_plxs = star['e_Plx'][sindx]
-        e_pmras = star['e_pmRA'][sindx]
-        e_pmdecs = star['e_pmDEC'][sindx]
+        ras = star['ra'][sindx]
+        decs = star['dec'][sindx]
+        glons = star['l'][sindx]
+        glats = star['b'][sindx]
+        plxs_obs = star['parallax'][sindx]
+        pmras_obs = star['pmra'][sindx]
+        pmdecs_obs = star['pmdec'][sindx]
+        e_plxs = star['parallax_error'][sindx]
+        e_pmras = star['pmra_error'][sindx]
+        e_pmdecs = star['pmdec_error'][sindx]
         # HRV
-        hrvs_obs = star['HRV_obs'][sindx]
-        e_hrvs = star['e_HRV'][sindx]
+        hrvs_obs = star['radial_velocity'][sindx]
+        e_hrvs = star['radial_velocity_error'][sindx]
         # G, G_BP, G_RP
-        gmag_obs = star['G_obs'][sindx]
-        gbpmag_obs = star['G_BP_obs'][sindx]
-        grpmag_obs = star['G_RP_obs'][sindx]
-        e_gmag = star['e_G'][sindx]
-        e_gbpmag = star['e_G_BP'][sindx]
-        e_grpmag = star['e_G_RP'][sindx]
+        gmag_obs = star['phot_g_mean_mag'][sindx]
+        gbpmag_obs = star['phot_bp_mean_mag'][sindx]
+        grpmag_obs = star['phot_rp_mean_mag'][sindx]
+        # e_gmag = star['e_G'][sindx]
+        # e_gbpmag = star['e_G_BP'][sindx]
+        # e_grpmag = star['e_G_RP'][sindx]
         # Teff
-        teff_obs = star['Teff_obs'][sindx]
-        e_teff = star['e_Teff'][sindx]
+        teff_obs = star['teff_val'][sindx]
+        # e_teff = star['e_Teff'][sindx]
         # Av
-        av_obs = star['Av_obs'][sindx]
+        av_obs = star['a_g_val'][sindx]
         # error correalation
-        plxpmra_corrs = np.zeros_like(e_plxs) 
-        plxpmdec_corrs = np.zeros_like(e_plxs) 
-        pmradec_corrs = np.zeros_like(e_plxs) 
-
-        # age [Fe/H] only for Galaxia
-        fehs_true = star['[Fe/H]_true'][sindx]
-        ages_true = star['Age'][sindx]
+        if flagGalaxia == True:
+            plxpmra_corrs = np.zeros_like(e_plxs) 
+            plxpmdec_corrs = np.zeros_like(e_plxs) 
+            pmradec_corrs = np.zeros_like(e_plxs) 
+            # age [Fe/H] only for Galaxia
+            fehs_true = star['[Fe/H]_true'][sindx]
+            ages_true = star['Age'][sindx]
+        else:
+            plxpmra_corrs = star['parallax_pmra_corr'][sindx]
+            plxpmdec_corrs = star['parallax_pmdec_corr'][sindx]
+            pmradec_corrs = star['pmra_pmdec_corr'][sindx]
+            # age [Fe/H] only for Galaxia
+            fehs_true = np.zeros_like(e_plxs)
+            ages_true = np.zeros_like(e_plxs)
 
         # convert deg -> rad
         glonrads = glons*np.pi/180.0
