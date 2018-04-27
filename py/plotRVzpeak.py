@@ -21,9 +21,18 @@ matplotlib.use('Agg')
 
 # fitting function
 def func(x, a, b, c, d, e):
-    return a*x+b+c*np.sin(x*2.0*np.pi/d+e)
+    return a*(x-8.2)+b+c*np.sin((x-8.2)*2.0*np.pi/d+e)
+    # return a*x+b+c*np.sin(x/d+e)
+def func2s(x, a, b, c, d, e, f, g, h):
+    return a*x+b+c*np.sin(x*2.0*np.pi/d+e)+f*np.sin(x*2.0*np.pi/g+h)
+
+def funclin(x, a, b):
+    return a*x+b
 
 ##### main programme start here #####
+
+# True: add fake sin curve
+FlagFake = False
 
 # epoch
 epoch = 2000.0
@@ -36,7 +45,19 @@ wsun = 7.25
 rsun = 8.2
 zsun = 0.025
 
-nsample = 3
+# initial fitting parameters
+# Schoenrich & Dehnen
+ain = 0.56644
+bin = -1.381
+cin = 0.817
+din = 2.0966
+ein = -1.74
+
+# fitting rlimit
+rlow = rsun-3.0
+rhigh = rsun+3.0
+
+nsample = 2
 for isamp in range(nsample):
     # number of Gaussian
     ngauss = 3
@@ -45,12 +66,12 @@ for isamp in range(nsample):
     # set range
     rw = 0.2
     if isamp == 0:
-        rrangexd = np.array([rsun-0.7, rsun+0.7])
-        nradgridxd = 7+1  
+        rrangexd = np.array([rsun-3.0, rsun+3.0])
+        nradgridxd = 30+1  
         # nradgridxd = 3+1  
     elif isamp == 1: 
-        rrangexd = np.array([rsun-2.0, rsun+2.0])
-        nradgridxd = 20+1
+        rrangexd = np.array([rsun-4.0, rsun+4.0])
+        nradgridxd = 40+1
         # nradgridxd = 5+1  
     else:
         rrangexd = np.array([rsun-3.0, rsun+3.0])
@@ -96,22 +117,18 @@ for isamp in range(nsample):
                      gauxd_rr_A[irad] = rdatav[iline,1]
                  iline += 1
 
-             # fake data for the highest amplitude data
-             # parameters
-             ain = 0.75
-             bin = -6.0
-             cin = 1.0
-             din = 2.0
-             ein = -1.56
-             if isamp == 0:
-                 gauxd_mean_FRVS[ivel,irad,0] = func(gauxd_rr_FRVS[irad], \
-                     ain,bin,cin,din,ein)
-             elif isamp == 1:
-                 gauxd_mean_FF[ivel,irad,0] = func(gauxd_rr_FF[irad],
-                     ain,bin,cin,din,ein)
-             else:
-                 gauxd_mean_A[ivel,irad,0] = func(gauxd_rr_A[irad], \
-                     ain,bin,0.8*cin,din,ein)
+             if FlagFake == True:
+                 # fake data for the highest amplitude data
+                 # parameters
+                 if isamp == 0:
+                     gauxd_mean_FRVS[ivel,irad,0] = func(gauxd_rr_FRVS[irad], \
+                         ain,bin,cin,din,ein)
+                 elif isamp == 1:
+                     gauxd_mean_FF[ivel,irad,0] = func(gauxd_rr_FF[irad],
+                         ain,bin,cin,din,ein)
+                 else:
+                     gauxd_mean_A[ivel,irad,0] = func(gauxd_rr_A[irad], \
+                         ain,bin,0.8*cin,din,ein)
 
 # spiral arm positoin at l=0 or l=180 from Reid et al. (2014)
 rsunr14 = 8.34
@@ -165,6 +182,9 @@ ysp = np.array([yprange[0],yprange[1]])
 for ii in range(nsparm):
     xsp = np.array([rsparm[ii], rsparm[ii]])
     plt.plot(xsp, ysp, linestyle='dashed', linewidth=3, color='k')
+# Sun's position
+xsp = np.array([rsun,rsun])
+plt.plot(xsp, ysp, linestyle='solid', linewidth=2, color='k')
 # plot only the highest amplitude peak
 # plt.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
 # Fw/RVS
@@ -174,34 +194,40 @@ plt.scatter(gauxd_rr_FRVS,gauxd_mean_FRVS[1,:,0], \
 plt.scatter(gauxd_rr_FF,gauxd_mean_FF[1,:,0], \
             c='k', marker = '^', s=40)
 # fitting with func
-poptini = np.array([ain, bin, 1.5, 2.2, ein])
-params, pcov = optimize.curve_fit(func,gauxd_rr_FF,gauxd_mean_FF[1,:,0],
-    p0=poptini)
+poptini = np.array([ain, bin, cin, din, ein])
+# poptini = np.array([ain, bin])
+sindx = np.where((gauxd_rr_FF>rlow) & (gauxd_rr_FF<rhigh))
+rvals = gauxd_rr_FF[sindx]
+vzvals = gauxd_mean_FF[1,sindx,0].flatten()
+# params, pcov = optimize.curve_fit(func,rvals,vzvals,p0=poptini)
+params, pcov = optimize.curve_fit(func2s,rvals,vzvals)
 # plot fitted data
-xsp = np.linspace(xprange[0],xprange[1],100)
+xsp = np.linspace(rlow,rhigh,100)
 print params
+prams = poptini
 ysp = func(xsp,params[0],params[1],params[2],params[3],params[4])
-plt.plot(xsp,ysp,color='k')
+# ysp = func2s(xsp,params[0],params[1],params[2],params[3],params[4], \
+#    params[5],params[6],params[7])
+# ysp = funclin(xsp,params[0],params[1])
+# plt.plot(xsp,ysp,color='k')
 # A star
-plt.scatter(gauxd_rr_A,gauxd_mean_A[1,:,0], \
-            c='b', marker = 'o', s=40)
+# plt.scatter(gauxd_rr_A,gauxd_mean_A[1,:,0], \
+#            c='b', marker = 'o', s=40)
 # fitting with func
-poptini = np.array([ain, bin, 1.5, 2.2, ein])
-params, pcov = optimize.curve_fit(func,gauxd_rr_A,gauxd_mean_A[1,:,0],
-    p0=poptini)
+# poptini = np.array([ain, bin, 1.5, 2.2, ein])
+# params, pcov = optimize.curve_fit(func,gauxd_rr_A,gauxd_mean_A[1,:,0],
+#    p0=poptini)
 # plot fitted data
-xsp = np.linspace(xprange[0],xprange[1],100)
-print params
-ysp = func(xsp,params[0],params[1],params[2],params[3],params[4])
-plt.plot(xsp,ysp,color='b')
+# xsp = np.linspace(xprange[0],xprange[1],100)
+# print params
+# ysp = func(xsp,params[0],params[1],params[2],params[3],params[4])
+# plt.plot(xsp,ysp,color='b')
+# lables
 plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
 plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
 plt.tick_params(labelsize=16, color='k')
 plt.grid(True)
 plt.tight_layout()
+plt.show()
 plt.savefig('RVzpeak.eps')
 plt.close()
-
-
-
-
