@@ -39,7 +39,7 @@ FileGauXD = False
 # True: output Gaussian model
 FigGauMod = True
 # flagGalaxia if False, assume the real Gaia data
-flagGalaxia = True
+flagGalaxia = False
 
 if FileGauXD == True:
     MCsample = False
@@ -47,7 +47,10 @@ if FileGauXD == True:
 # number of MC sampling
 nmc = 100
 # epoch
-epoch = 2000.0
+if flagGalaxia ==True:
+    epoch = 2000.0
+else:
+    epoch = 2000.0
 # constant for proper motion unit conversion
 pmvconst = 4.74047
 if flagGalaxia == True:
@@ -81,21 +84,30 @@ if myrank == 0:
 
 nsample = 3
 
-# for isamp in range(nsample):
 for isamp in range(nsample):
+# for isamp in range(1,3):
     if FileErrors == False:
         # read the data and compute errors
         # input data
         if isamp == 0:
             # Bright F stars with RVS data
-            infile = 'galaxia_gaiadr2_V13.fits'
+            if flagGalaxia == True:
+                infile = 'galaxia_gaiadr2_V13.fits'
+            else:
+                infile = 'gaiadr2_V13.fits'
             star_hdus = pyfits.open(infile)
             star = star_hdus[1].data
             star_hdus.close()
         elif isamp == 1:
-            infilel0 = 'galaxia_gaiadr2_l0.fits'
+            if flagGalaxia == True:
+                infilel0 = 'galaxia_gaiadr2_l0.fits'
+            else:
+                infilel0 = 'gaiadr2_l0.fits'
             starl0 = pyfits.open(infilel0)
-            infilel180 = 'galaxia_gaiadr2_l180.fits'
+            if flagGalaxia == True:
+                infilel180 = 'galaxia_gaiadr2_l180.fits'
+            else:
+                infilel180 = 'gaiadr2_l180.fits'
             starl180 = pyfits.open(infilel180)
             nrowsl0 = starl0[1].data.shape[0]
             nrowsl180 = starl180[1].data.shape[0]
@@ -138,11 +150,20 @@ for isamp in range(nsample):
         # minimum distance limit
         distmin = 0.0000000001
 
-        sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
+        if isamp == 0:
+            sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
+                 (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
+                 (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
+                 (star['parallax_error']/star['parallax']<e_plxlim) & 
+                 (star['teff_val']>Tefflow) & (star['teff_val']<Teffhigh) &
+                 (star['radial_velocity_error']>0.0))
+        else:
+            sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
                  (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
                  (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
                  (star['parallax_error']/star['parallax']<e_plxlim) & 
                  (star['teff_val']>Tefflow) & (star['teff_val']<Teffhigh))
+
         nstars = len(star['ra'][sindx])
 
         if myrank == 0:
@@ -197,9 +218,14 @@ for isamp in range(nsample):
         dists_obs = 1.0/plxs_obs
 
         # velocity
-        Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
-            pmras_obs, pmdecs_obs, ras, \
-            decs, degree=True, epoch=epoch)
+        if flagGalaxia == True:
+            Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
+                pmras_obs, pmdecs_obs, ras, \
+                decs, degree=True, epoch=epoch)
+        else:
+            Tpmllpmbb = bovy_coords.pmrapmdec_to_pmllpmbb( \
+                pmras_obs, pmdecs_obs, ras, \
+                decs, degree=True)
         pmlons_obs = Tpmllpmbb[:,0]
         pmlats_obs = Tpmllpmbb[:,1]
         # mas/yr -> km/s
@@ -270,10 +296,16 @@ for isamp in range(nsample):
             # -> pml pmb
             ratile = np.tile(ras, (nmc, 1)).flatten()
             dectile = np.tile(decs, (nmc, 1)).flatten()
-            pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
-                plxpmradec_mc[:, 1, :].T.flatten(), \
-                plxpmradec_mc[:, 2, :].T.flatten(), \
-                ratile, dectile, degree=True, epoch=epoch)
+            if flagGalaxia == True:
+                pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
+                    plxpmradec_mc[:, 1, :].T.flatten(), \
+                    plxpmradec_mc[:, 2, :].T.flatten(), \
+                    ratile, dectile, degree=True, epoch=epoch)
+            else:
+                pmllbb_sam = bovy_coords.pmrapmdec_to_pmllpmbb( \
+                    plxpmradec_mc[:, 1, :].T.flatten(), \
+                    plxpmradec_mc[:, 2, :].T.flatten(), \
+                    ratile, dectile, degree=True)
             # reshape
             pmllbb_sam = pmllbb_sam.reshape((nmc, nstars, 2))
             # distance MC sampling
@@ -453,7 +485,7 @@ for isamp in range(nsample):
         # nvel = 2, 0: Vrot, 1: Vrot
         nvel = 2
         # set range
-        rw = 0.2
+        rw = 0.5
         if isamp == 0:
             rrangexd = np.array([rsun-0.7, rsun+0.7])
             nradgridxd = 7+1  
@@ -895,7 +927,7 @@ if myrank == 0:
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
     cb.ax.tick_params(labelsize=16)
-    # plt.show()
+    plt.show()
     plt.savefig('RVrot.eps')
     plt.close(f)
 
@@ -987,7 +1019,7 @@ if myrank == 0:
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
     cb.ax.tick_params(labelsize=16)
-    # plt.show()
+    plt.show()
     plt.savefig('RVz.eps')
     plt.close(f)
 
