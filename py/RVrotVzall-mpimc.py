@@ -1,6 +1,6 @@
 
 #
-# RVrotVz_FRVS.py
+# RVrotVzall-mpimc.py
 #
 # reading gaia_mock/galaxia_gaia
 #
@@ -33,11 +33,11 @@ myrank = comm.Get_rank()
 # True: MC sampling on, otherwise no MC or XD
 MCsample = False
 # True: read star_error*.npy
-FileErrors = False
+FileErrors = True
 # True: read gaussxd*.asc
 FileGauXD = True
 # True: output Gaussian model
-FigGauMod = True
+FigGauMod = False
 # flagGalaxia if False, assume the real Gaia data
 flagGalaxia = False
 
@@ -74,6 +74,7 @@ else:
 
 # condition to select stars 
 e_plxlim = 0.15
+# e_plxlim = 0.1
 zmaxlim = 0.2
 ymaxlim = 0.2
 vloslim = 5.0
@@ -164,10 +165,14 @@ for isamp in range(nsample):
 #                  np.logical_and(star['l']<190.0,star['l']>170.0))) &
 #                 (np.fabs(star['b'])<10.0) &
         elif isamp == 1:
+            # sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
+            #     (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
+            #     (star['parallax_error']/star['parallax']<e_plxlim))
             sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
                  (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
-                 (star['parallax_error']/star['parallax']<e_plxlim))
-#                 (star['teff_val']<Teffhigh))
+                 (star['parallax_error']/star['parallax']<e_plxlim) &
+                 (np.logical_or(np.logical_or(star['l']>355.0,star['l']<5.0),
+                  np.fabs(star['l']-180.0)<5.0)))
         else:
             sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
                  (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
@@ -464,12 +469,13 @@ for isamp in range(nsample):
             rdata = np.load('star_RVrotVzerror_FF.npz')
         else:
             rdata = np.load('star_RVrotVzerror_A.npz')
-        rgals_obs = rdata['rgals_obs']
-        vrots_obs = rdata['vrots_obs']
-        vzs_obs = rdata['vzs_obs']
-        e_rgals = rdata['e_rgals']
-        e_vrots = rdata['e_vrots']
-        e_vzs = rdata['e_vzs']
+        sindx = np.where(rdata['e_vrots']<5.0)
+        rgals_obs = rdata['rgals_obs'][sindx]
+        vrots_obs = rdata['vrots_obs'][sindx]
+        vzs_obs = rdata['vzs_obs'][sindx]
+        e_rgals = rdata['e_rgals'][sindx]
+        e_vrots = rdata['e_vrots'][sindx]
+        e_vzs = rdata['e_vzs'][sindx]
         if myrank == 0:
             print ' sample, Ns=',isamp,len(e_vzs)
 
@@ -706,8 +712,13 @@ for isamp in range(nsample):
     # minimum number of stars in each column
     nsmin = 25
     # set number of grid
-    ngridx = 40
-    ngridy = 40
+    # used in the paper submitted
+    # ngridx = 40
+    # ngridy = 40
+    ngridx = 80
+    ngridy = 80
+    ngridx = 180
+    ngridy = 180
     # grid plot for R vs. Vrot
     rrange = np.array([rsun-4.0, rsun+4.5])
     vrotrange = np.array([-50, 50.0])
@@ -732,6 +743,15 @@ for isamp in range(nsample):
     H[:, np.sum(H, axis=0)<nsmin] = 0.0
     H[:, np.sum(H, axis=0)>=nsmin] = H[:, np.sum(H, axis=0)>=nsmin] \
       / np.sum(H[:, np.sum(H, axis=0)>=nsmin], axis=0)
+    # log: linear seems to be better
+    # cmin = -3.0
+    # cmax = -1.5
+    # hlimit = 10.0**cmin
+    # hlogindx = np.where(H>=hlimit)
+    # hlowindx = np.where(H<hlimit)  
+    # H[hlogindx]=np.log10(H[hlogindx])
+    # H[hlowindx]=cmin
+
     # print ' normalised hist = ',H
     # plt.imshow(H, interpolation='gaussian', origin='lower', aspect='auto', \
     #    extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]])
@@ -925,12 +945,17 @@ if myrank == 0:
     # combined plot for R vs Vrot
     ngauss = ngauss_sam[0]
     # colour mapscale
+    # used in the paper
+    # cmin = 0.0
+    # cmax = 0.07
+    #
     cmin = 0.0
-    cmax = 0.07
+    cmax = 0.02
     gauamplim=0.2
     gausiglim=10.0
     f, (ax1, ax2) = plt.subplots(2, sharex = True, figsize=(10,8))
     labpos = np.array([4.5, 40.0])
+    # ax1.imshow(HFRVS_RVrot, interpolation='nearest', origin='lower', \
     ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1], \
@@ -955,8 +980,8 @@ if myrank == 0:
                 marker = '^'
             else:
                 marker = 'o'
-            # ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
-            #    c='cyan', marker = marker)
+            ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
+                c='cyan', marker = marker)
     # draw parallelogram, resonance features.
     # F1
     xsp = np.array([4.5,  4.5,  6.25,  6.25,   4.5])
@@ -996,6 +1021,7 @@ if myrank == 0:
     ax1.tick_params(labelsize=16, color='k')
     ax1.set_yticks(vrotticks)
 
+    # im = ax2.imshow(HFF_RVrot, interpolation='nearest', origin='lower', \
     im = ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1], \
@@ -1030,8 +1056,8 @@ if myrank == 0:
                 marker = '^'
             else:
                 marker = 'o'
-            # ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
-            #    c='cyan', marker = marker)
+            ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
+                c='cyan', marker = marker)
             #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
     ax2.text(labpos[0], labpos[1], r'All', fontsize=16, color='w')
     # draw parallelogram, resonance features.
@@ -1085,7 +1111,7 @@ if myrank == 0:
     cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
     cb = f.colorbar(im, cax=cbar_ax)
     cb.ax.tick_params(labelsize=16)
-    # plt.show()
+    plt.show()
     plt.savefig('RVrot.eps')
     plt.close(f)
 
