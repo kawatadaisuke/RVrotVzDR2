@@ -19,10 +19,10 @@ from galpy.util import bovy_coords
 ##### main programme start here #####
 
 # flags
-# 0: A star, otherwise: F star
-flagAF = 1
+# 0: A star, 1: F star, otherwise all stars
+flagAF = 2
 # 0: l=0, otherwise: l=180
-flagglon = 0
+flagglon = 1
 
 # constant for proper motion unit conversion
 pmvconst = 4.74047
@@ -64,13 +64,18 @@ if flagAF == 0:
     print ' for A stars'
     Tefflow = 7330.0
     Teffhigh = 10000.0
-else: 
+elif flagAF == 1: 
     # F star 
     print ' for F stars'
     # Tefflow = 6000.0
     Tefflow = 6600.0
     Teffhigh = 7330.0
     # Teffhigh = 6900.0
+else:
+    # F star 
+    print ' for all stars'
+    Tefflow = 0.0
+    Teffhigh = 1000000.0
 
 # minimum distance limit
 distmin = 0.0000000001
