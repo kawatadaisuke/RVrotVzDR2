@@ -31,15 +31,18 @@ myrank = comm.Get_rank()
 
 # flags
 # True: MC sampling on
-MCsample = True
+MCsample = False
 # True: read star_error*.npy
 FileErrors = False
 # True: read gaussxd*.asc
 FileGauXD = False
 # True: output Gaussian model
-FigGauMod = True
+FigGauMod = False
 # flagGalaxia if False, assume the real Gaia data
 flagGalaxia = False
+# output fits or Ascii file for star data
+OutStarFits = True
+OutStarAscii = False
 
 if FileGauXD == True:
     MCsample = False
@@ -73,8 +76,8 @@ else:
 
 # condition to select stars 
 e_plxlim = 0.15
-zmaxlim = 0.2
-ymaxlim = 0.5
+zmaxlim = 0.5
+ymaxlim = 2.0
 # minimum plx
 plxlim=0.001
 
@@ -82,7 +85,7 @@ if myrank == 0:
     if MCsample == True:
         print ' MCsample is on. Nmc = ',nmc
 
-nsample = 3
+nsample = 1
 
 for isamp in range(nsample):
 # for isamp in range(1,3):
@@ -94,7 +97,7 @@ for isamp in range(nsample):
             if flagGalaxia == True:
                 infile = 'galaxia_gaiadr2_V13.fits'
             else:
-                infile = 'gaiadr2_V13.fits'
+                infile = 'DR2/gaiadr2_RVSdy2dz05eVlos5ep15.fits'
             star_hdus = pyfits.open(infile)
             star = star_hdus[1].data
             star_hdus.close()
@@ -151,12 +154,13 @@ for isamp in range(nsample):
         distmin = 0.0000000001
 
         if isamp == 0:
-            sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
-                 (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
-                 (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
-                 (star['parallax_error']/star['parallax']<e_plxlim) & 
-                 (star['teff_val']>Tefflow) & (star['teff_val']<Teffhigh) &
-                 (star['radial_velocity_error']>0.0))
+            sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim))
+            # sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
+            #     (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
+            #     (star['parallax']>0.0) & (star['parallax']<1.0/distmin) & 
+            #     (star['parallax_error']/star['parallax']<e_plxlim) & 
+            #     (star['teff_val']>Tefflow) & (star['teff_val']<Teffhigh) &
+            #     (star['radial_velocity_error']>0.0))
         else:
             sindx = np.where((zabs < zmaxlim) & (yabs < ymaxlim) &
                  (gabsmag > -(2.5/4000.0)*(star['teff_val']-6000.0)+1.0) &
@@ -413,18 +417,37 @@ for isamp in range(nsample):
             vrots_sam -= vcircsun
 
         if myrank == 0:
-            if isamp == 0:
-                f=open('star_RVrotVz_FRVS.asc','w')
-            elif isamp == 1:
-                f=open('star_RVrotVz_FF.asc','w')
-            else:
-                f=open('star_RVrotVz_A.asc','w')
-            for i in range(nstars):
-                print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
-                    %(xpos_obs[i], ypos_obs[i], zpos_obs[i], rgals_obs[i], vrots_obs[i], \
-                    vrads_obs[i], vzs_obs[i], dists_obs[i], glons[i], glats[i], \
-                    fehs_true[i], ages_true[i], e_rgals[i], e_vrots[i], e_vzs[i])
-            f.close()
+            if OutStarAscii == True:
+                if isamp == 0:
+                    f=open('star_RVrotVz_RVS.asc','w')
+                elif isamp == 1:
+                    f=open('star_RVrotVz_FF.asc','w')
+                else:
+                    f=open('star_RVrotVz_A.asc','w')
+                print >>f,"# X Y Z Rgal Vrot Vrad Vz D Glon Glat FeH Age e_Rgal e_Vrot e_Vz"
+                for i in range(nstars):
+                    print >>f, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f" \
+                        %(xpos_obs[i], ypos_obs[i], zpos_obs[i], rgals_obs[i], vrots_obs[i], \
+                        vrads_obs[i], vzs_obs[i], dists_obs[i], glons[i], glats[i], \
+                        fehs_true[i], ages_true[i], e_rgals[i], e_vrots[i], e_vzs[i])
+                f.close()
+            if OutStarFits == True:
+                if isamp == 0:
+                    fname = 'star_RVrotVz_RVS.fits'
+                else:
+                    fname = 'star_RVrotVz_all.fits'
+                tbhdu = pyfits.BinTableHDU.from_columns([\
+                    pyfits.Column(name='X',format='D',array=xpos_obs),\
+                    pyfits.Column(name='Y',format='D',array=ypos_obs),\
+                    pyfits.Column(name='Z',format='D',array=zpos_obs),\
+                    pyfits.Column(name='Rgal',format='D',array=rgals_obs),\
+                    pyfits.Column(name='Vrot',format='D',array=vrots_obs),\
+                    pyfits.Column(name='Vrad',format='D',array=vrads_obs),\
+                    pyfits.Column(name='Vz',format='D',array=vzs_obs),\
+                    pyfits.Column(name='Dist',format='D',array=dists_obs),\
+                    pyfits.Column(name='Glon',format='D',array=glons),\
+                    pyfits.Column(name='Glat',format='D',array=glats)])
+                tbhdu.writeto(fname,clobber=True)
             # save numpy data
             if isamp == 0:
                 f=np.savez('star_RVrotVzerror_FRVS.npz',rgals_obs=rgals_obs, \
@@ -438,8 +461,6 @@ for isamp in range(nsample):
                 f=np.savez('star_RVrotVzerror_A.npz',rgals_obs=rgals_obs, \
                     vrots_obs=vrots_obs,vzs_obs=vzs_obs,
                     e_rgals=e_rgals, e_vrots=e_vrots, e_vzs=e_vzs )
-
-
     else:
         # read the error files
         if isamp == 0:

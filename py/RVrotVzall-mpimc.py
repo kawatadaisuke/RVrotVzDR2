@@ -40,6 +40,8 @@ FileGauXD = True
 FigGauMod = False
 # flagGalaxia if False, assume the real Gaia data
 flagGalaxia = False
+# figure for paper
+FigPaper = False
 
 if FileGauXD == True:
     MCsample = False
@@ -47,7 +49,7 @@ if FileGauXD == True:
 # number of MC sampling
 nmc = 100
 # number of gaussian model
-ngauss_sam=np.array([5, 3])
+ngauss_sam=np.array([5, 2])
 # epoch
 if flagGalaxia ==True:
     epoch = 2000.0
@@ -73,11 +75,13 @@ else:
     zsun = 0.025
 
 # condition to select stars 
-e_plxlim = 0.15
-# e_plxlim = 0.1
+# e_plxlim = 0.15
+e_plxlim = 0.1
 zmaxlim = 0.2
 ymaxlim = 0.2
-vloslim = 5.0
+# submitted
+# vloslim = 5.0
+vloslim = 100.0
 # minimum plx
 plxlim=0.001
 
@@ -715,14 +719,24 @@ for isamp in range(nsample):
     # used in the paper submitted
     # ngridx = 40
     # ngridy = 40
-    ngridx = 80
-    ngridy = 80
-    ngridx = 180
-    ngridy = 180
+    if isamp == 0:
+        ngridx = 180
+        ngridy = 90
+    else:
+        ngridx = 150
+        ngridy = 50  
+        # ngridx = 300
+        # ngridy = 150
     # grid plot for R vs. Vrot
-    rrange = np.array([rsun-4.0, rsun+4.5])
+    # submitted version
+    # rrange = np.array([rsun-4.0, rsun+4.5])
+    rrange = np.array([rsun-3.5, rsun+4.0])
+    # submitted version
+    # vrotrange = np.array([-50, 50.0])
+    # vrotticks = np.array([-40.0, -20.0, 0.0, 20.0, 40.0])
     vrotrange = np.array([-50, 50.0])
     vrotticks = np.array([-40.0, -20.0, 0.0, 20.0, 40.0])
+
 
     # 2D histogram 
     # if MCsample == True:
@@ -744,8 +758,8 @@ for isamp in range(nsample):
     H[:, np.sum(H, axis=0)>=nsmin] = H[:, np.sum(H, axis=0)>=nsmin] \
       / np.sum(H[:, np.sum(H, axis=0)>=nsmin], axis=0)
     # log: linear seems to be better
-    # cmin = -3.0
-    # cmax = -1.5
+    # cmin = -5.0
+    # cmax = -2.0
     # hlimit = 10.0**cmin
     # hlogindx = np.where(H>=hlimit)
     # hlowindx = np.where(H<hlimit)  
@@ -773,8 +787,10 @@ for isamp in range(nsample):
 
 
     # grid plot for R vs. Vz
+    # submitted high-resolution makes worse
     ngridx = 40
     ngridy = 20
+  
     rrange = np.array([rsun-4.0, rsun+4.0])
     vzrange = np.array([-20.0, 20.0])
     vzticks = np.array([-10.0, 0.0, 10.0])
@@ -885,8 +901,11 @@ for isamp in range(nsample):
     rgrid_vz = np.zeros(nrad)
     rlow = lowrad
     rhigh = lowrad+drad
+    rw = 0.2
     for ii in range(nrad):
-        sindx = np.where((rgals_obs>=rlow) & (rgals_obs<rhigh))
+        # sindx = np.where((rgals_obs>=rlow) & (rgals_obs<rhigh))
+        rr = 0.5*(rlow+rhigh)
+        sindx = np.fabs(rgals_obs-rr)<rw
         rgrid_vz[ii] = 0.5*(rlow+rhigh)
         vzmed_rr[ii] = np.median(vzs_obs[sindx])
         rlow += drad
@@ -898,6 +917,13 @@ for isamp in range(nsample):
     else:
         vzmed_FF = np.copy(vzmed_rr)
         vzmed_rr_FF = np.copy(rgrid_vz)
+    # fileoutput
+    filename = 'vzmed'+str(isamp)+'.asc'
+    fv = open(filename, 'w')
+    for ii in range(nrad):
+        print >>fv, "%d %f %f" % (ii, \
+            rgrid_vz[ii], vzmed_rr[ii])
+    fv.close()
 
 # spiral arm positoin at l=0 or l=180 from Reid et al. (2014)
 rsunr14 = 8.34
@@ -949,14 +975,17 @@ if myrank == 0:
     # cmin = 0.0
     # cmax = 0.07
     #
-    cmin = 0.0
-    cmax = 0.02
+    # for RVS
+    cmin = -0.005
+    cmax = 0.0275
     gauamplim=0.2
-    gausiglim=10.0
+    gausiglim=50.0
     f, (ax1, ax2) = plt.subplots(2, sharex = True, figsize=(10,8))
-    labpos = np.array([4.5, 40.0])
+    # submitted version
+    # labpos = np.array([4.5, 40.0])
+    labpos = np.array([5.0, 40.0])
     # ax1.imshow(HFRVS_RVrot, interpolation='nearest', origin='lower', \
-    ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
+    im1 = ax1.imshow(HFRVS_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFRVS_RVrot_xedges[0], HFRVS_RVrot_xedges[-1], \
                    HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]], \
@@ -967,7 +996,12 @@ if myrank == 0:
     ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
     for ii in range(nsparm):
         xsp = np.array([rsparm[ii], rsparm[ii]])
-        ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        if FigPaper == True:
+            ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        else: 
+            if ii == 0 or ii == 3: 
+                ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+
     # Sun's position
     xsp = np.array([rsun,rsun])
     ax1.plot(xsp, ysp, linestyle='solid', linewidth=2, color='w')
@@ -980,49 +1014,66 @@ if myrank == 0:
                 marker = '^'
             else:
                 marker = 'o'
-            ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
-                c='cyan', marker = marker)
-    # draw parallelogram, resonance features.
-    # F1
-    xsp = np.array([4.5,  4.5,  6.25,  6.25,   4.5])
-    ysp = np.array([0.0,-15.0,-40.0, -25.0, 0.0])
-    ax1.plot(xsp,ysp,color='w')
-    # F2
-    xsp = np.array([5.5,  5.5,  8.25,  8.25,   5.5])
-    ysp = np.array([20.0, 0.0,-45.0,  -25.0,  20.0])
-    ax1.plot(xsp,ysp,color='w')
-    # F3 dy/dx=22
-    xsp = np.array([7.5,  7.5,  9.0,   9.0,    7.5])
-    ysp = np.array([14.5, -0.5,-33.5, -18.5,  14.5])
-    ax1.plot(xsp,ysp,color='w')
-    # F4 dy/dx = 22
-    xsp = np.array([8.25, 8.25,  9.75,  9.75,  8.25])
-    ysp = np.array([20.0,  5.0, -28.0, -13.0,  20.0])
-    ax1.plot(xsp,ysp,color='w')
-    # F5
-    xsp = np.array([8.0,   8.0,  8.5,  8.5,  8.0])
-    ysp = np.array([15.0, 8.0, 8.0, 15.0, 15.0])
-    ax1.plot(xsp,ysp,color='w')
-    # F6
-    # xsp = np.array([9.75, 9.75,  11.5,  11.5,   9.75])
-    # ysp = np.array([-5.0,-20.0,-45.0,  -30.0,   -5.0])
-    xsp = np.array([ 9.0,  9.0,  11.5,  11.5,    9.0])
-    ysp = np.array([ 5.5, -9.5, -45.0,  -30.0,   5.5])
-    ax1.plot(xsp,ysp,color='w')
-    # F7
-    xsp = np.array([9.75, 9.75,  12.25,  12.25,   9.75])
-    ysp = np.array([17.25, 2.25,  -33.2,  -16.2,    17.25])
-    # ysp = np.array([20.0, 5.0,  -30.7,  -15.7,  20.0])
-    ax1.plot(xsp,ysp,color='w')
+            # ax1.scatter(gauxd_rr_FRVS[sindx],gauxd_mean_FRVS[0,sindx,ii], \
+            #   c='cyan', marker = marker)
+    # draw line for features
+    # Hercules gap 
+    # ax1.scatter(7.6,0.0)
+    # F1 - Hercules low, -28 (x-6.8666)
+    xsp1 = np.array([6.1523, 8.652])
+    ysp1 = np.array([20.0,   -50])
+    ax1.plot(xsp1,ysp1,color='w')
+    if FigPaper == True:
+        ax1.text(xsp1[1], ysp1[1]+3.0, r'Hercules', fontsize=16, color='w')
+    # F2 - -28 (x-7.25)
+    xsp2 = np.array([6.536, 8.679])
+    ysp2 = np.array([20.0, -40.0])
+    ax1.plot(xsp2,ysp2,color='w')
+    # F3 -28 (x-7.9)
+    xsp3 = np.array([7.186, 9.329])
+    ysp3 = np.array([20.0, -40.0])
+    ax1.plot(xsp3,ysp3,color='w')
+    # F4 -28 (x-8.6)
+    xsp4 = np.array([7.886, 10.029])
+    ysp4 = np.array([20.0, -40.0])
+    ax1.plot(xsp4,ysp4,color='w')
+    # F5 -28 (x-9)
+    xsp5 = np.array([8.286, 10.429])
+    ysp5 = np.array([20.0, -40.0])
+    ax1.plot(xsp5,ysp5,color='w')
+    # F6  -10 (x-8.25)
+    xsp6 = np.array([9.25, 10.75])
+    ysp6 = np.array([-10.0, -25])
+    ax1.plot(xsp6,ysp6,color='w')
+    # F7  -8 (x-9.5)
+    xsp7 = np.array([10.0, 11.375])
+    ysp7 = np.array([-4.0, -15.0])
+    ax1.plot(xsp7,ysp7,color='w')
+    # F8  -28 (x-9.5)
+    # xsp8 = np.array([8.071, 9.5])
+    # ysp8 = np.array([40.0, 0.0])
+    # ax1.plot(xsp8,ysp8,color='w')
 
+    # H17  20 (H17) +11.0 (Vsun)
+    if FigPaper == True:
+        xsph17 = np.array([rsun+0.1, rsun+0.6])
+        ysph17 = np.array([31.0, 31.0])
+        ax1.plot(xsph17,ysph17,color='w')
+        ax1.text(xsph17[1], ysph17[1], r'H17', fontsize=16, color='w')
     # 
-    ax1.text(labpos[0], labpos[1], r'RVS', fontsize=16, color='w')
-    ax1.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-    ax1.tick_params(labelsize=16, color='k')
-    ax1.set_yticks(vrotticks)
+        ax1.text(labpos[0], labpos[1], r'RVS', fontsize=16, color='w')
+        ax1.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+        ax1.tick_params(labelsize=16, color='k')
+        ax1.set_yticks(vrotticks)
+    else:
+        ax1.tick_params(labelsize=24, color='k')
+        ax1.set_yticks(vrotticks)
 
+    cmin = 0.0
+    # cmax = 0.03
+    cmax = 0.06
     # im = ax2.imshow(HFF_RVrot, interpolation='nearest', origin='lower', \
-    im = ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
+    im2 = ax2.imshow(HFF_RVrot, interpolation='gaussian', origin='lower', \
            aspect='auto', vmin=cmin, vmax=cmax, \
            extent=[HFF_RVrot_xedges[0], HFF_RVrot_xedges[-1], \
                    HFF_RVrot_yedges[0], HFF_RVrot_yedges[-1]], \
@@ -1033,17 +1084,22 @@ if myrank == 0:
     ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
     for ii in range(nsparm):
         xsp = np.array([rsparm[ii], rsparm[ii]])
-        ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
-        if ii == 0:
-            ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Scutum', fontsize=16, color='w')
-        if ii == 1:
-            ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Sagittarius', fontsize=16, color='w')
-        if ii == 2:
-            ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Local', fontsize=16, color='w')
-        if ii == 3:
-            ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Perseus', fontsize=16, color='w')
-        if ii == 4:
-            ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Outer', fontsize=16, color='w')
+        if FigPaper == True:
+            ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+#        else: 
+#            if ii == 0 or ii == 3: 
+#                # ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        if FigPaper == True:
+            if ii == 0:
+                ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Scutum', fontsize=16, color='w')
+            if ii == 1:
+                ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Sagittarius', fontsize=16, color='w')
+            if ii == 2:
+                ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Local', fontsize=16, color='w')
+            if ii == 3:
+                ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Perseus', fontsize=16, color='w')
+            if ii == 4:
+                ax2.text(xsp[1]+0.05, ysp[1]-10.0, r'Outer', fontsize=16, color='w')
     # Sun's position
     xsp = np.array([rsun,rsun])
     ax2.plot(xsp, ysp, linestyle='solid', linewidth=2, color='w')
@@ -1056,63 +1112,74 @@ if myrank == 0:
                 marker = '^'
             else:
                 marker = 'o'
-            ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
-                c='cyan', marker = marker)
+            # ax2.scatter(gauxd_rr_FF[sindx],gauxd_mean_FF[0,sindx,ii], \
+            #  c='cyan', marker = marker)
             #        c='w', s = 100*gauxd_amp_FF[0,sindx,ii], marker = marker)
-    ax2.text(labpos[0], labpos[1], r'All', fontsize=16, color='w')
-    # draw parallelogram, resonance features.
+    if FigPaper == True:
+        ax2.text(labpos[0], labpos[1], r'All', fontsize=16, color='w')
+    # draw line for features
     # F1
-    xsp = np.array([4.5,  4.5,  6.25,  6.25,   4.5])
-    ysp = np.array([0.0,-15.0,-40.0, -25.0, 0.0])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0], ysp[0], r'F1', fontsize=16, color='w')
+    ax2.plot(xsp1,ysp1,color='w')
+    if FigPaper == True:
+        ax2.text(xsp1[0], ysp1[0], r'F1', fontsize=16, color='w')
     # F2
-    xsp = np.array([5.5,  5.5,  8.25,  8.25,   5.5])
-    ysp = np.array([20.0, 0.0,-45.0,  -25.0,  20.0])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0], ysp[0], r'F2', fontsize=16, color='w')
-    # F3 dy/dx=22
-    xsp = np.array([7.5,  7.5,  9.0,   9.0,    7.5])
-    ysp = np.array([14.5, -0.5,-33.5, -18.5,  14.5])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0]-0.3, ysp[0], r'F3', fontsize=16, color='w')
-    # F4 dy/dx = 22
-    xsp = np.array([8.25, 8.25,  9.75,  9.75,  8.25])
-    ysp = np.array([20.0,  5.0, -28.0, -13.0,  20.0])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0], ysp[0], r'F4', fontsize=16, color='w')
-    # H17
-    xsp = np.array([8.0,   8.0,  8.5,  8.5,  8.0])
-    ysp = np.array([15.0, 8.0, 8.0, 15.0, 15.0])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0]-0.3, ysp[0], r'H17', fontsize=16, color='w')
+    ax2.plot(xsp2,ysp2,color='w')
+    if FigPaper == True:
+        ax2.text(xsp2[0], ysp2[0], r'F2', fontsize=16, color='w')
+    # F3
+    ax2.plot(xsp3,ysp3,color='w')
+    if FigPaper == True:
+        ax2.text(xsp3[0], ysp3[0], r'F3', fontsize=16, color='w')
+    # F4
+    ax2.plot(xsp4,ysp4,color='w')
+    if FigPaper == True:
+        ax2.text(xsp4[0], ysp4[0], r'F4', fontsize=16, color='w')
     # F5
-    # xsp = np.array([9.75, 9.75,  11.5,  11.5,   9.75])
-    # ysp = np.array([-5.0,-20.0,-45.0,  -30.0,   -5.0])
-    xsp = np.array([ 9.0,  9.0,  11.5,  11.5,    9.0])
-    ysp = np.array([ 5.5, -9.5, -45.0,  -30.0,   5.5])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0], ysp[0], r'F5', fontsize=16, color='w')
+    ax2.plot(xsp5,ysp5,color='w')
+    if FigPaper == True:
+        ax2.text(xsp5[0], ysp5[0], r'F5', fontsize=16, color='w')
     # F6
-    xsp = np.array([9.75, 9.75,  12.25,  12.25,   9.75])
-    ysp = np.array([17.25, 2.25,  -33.2,  -16.2,    17.25])
-    # ysp = np.array([20.0, 5.0,  -30.7,  -15.7,  20.0])
-    ax2.plot(xsp,ysp,color='w')
-    ax2.text(xsp[0], ysp[0], r'F6', fontsize=16, color='w')
+    ax2.plot(xsp6,ysp6,color='w')
+    if FigPaper == True:
+        ax2.text(xsp6[1], ysp6[1], r'F6', fontsize=16, color='w')
+    # F7
+    ax2.plot(xsp7,ysp7,color='w')
+    if FigPaper == True:
+        ax2.text(xsp7[1], ysp7[1], r'F7', fontsize=16, color='w')
+    # F8
+    # ax2.plot(xsp8,ysp8,color='w')
+    # ax2.text(xsp8[1], ysp8[1], r'F8', fontsize=16, color='w')
+    # H17
+    if FigPaper == True:
+        ax2.plot(xsph17,ysph17,color='w')
 
     #
-    ax2.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-    ax2.tick_params(labelsize=16, color='k')
-    ax2.set_yticks(vrotticks)
+    if FigPaper == True:
+        ax2.set_ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+        ax2.tick_params(labelsize=16, color='k')
+        ax2.set_yticks(vrotticks)
 
-    plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
-    plt.ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
-    f.subplots_adjust(hspace=0.0, right = 0.8)
-    cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
-    cb = f.colorbar(im, cax=cbar_ax)
-    cb.ax.tick_params(labelsize=16)
-    plt.show()
-    plt.savefig('RVrot.eps')
+        plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
+        plt.ylabel(r"$V_{\rm rot}-V_{\rm LSR}$ (km s$^{-1}$)", fontsize=18)
+    else:
+        ax2.tick_params(labelsize=24, color='k')
+        ax2.set_yticks(vrotticks)
+
+    if FigPaper == True:
+        f.subplots_adjust(hspace=0.0, right = 0.8)
+        cbar_ax1 = f.add_axes([0.8, 0.5, 0.05, 0.375])
+        cb1 = f.colorbar(im1, cax=cbar_ax1)
+        cb1.ax.tick_params(labelsize=16)
+        cbar_ax2 = f.add_axes([0.8, 0.1, 0.05, 0.375])
+        cb2 = f.colorbar(im2, cax=cbar_ax2)
+        cb2.ax.tick_params(labelsize=16)
+    else:
+        f.subplots_adjust(hspace=0.0, right = 0.95)
+    # plt.show()
+    if FigPaper == True:
+        plt.savefig('RVrot.eps')
+    else:
+        plt.savefig('RVrot.jpg')
     plt.close(f)
 
     # R vs. Vz

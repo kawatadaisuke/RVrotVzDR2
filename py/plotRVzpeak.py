@@ -31,9 +31,6 @@ def funclin(x, a, b):
 
 ##### main programme start here #####
 
-# True: add fake sin curve
-FlagFake = False
-
 # epoch
 epoch = 2000.0
 # constant for proper motion unit conversion
@@ -57,10 +54,10 @@ ein = -1.74
 rlow = rsun-3.0
 rhigh = rsun+3.0
 
-nsample = 2
+nsample = 3
 for isamp in range(nsample):
     # number of Gaussian
-    ngauss = 3
+    ngauss = 2
     # nvel = 2, 0: Vrot, 1: Vrot
     nvel = 2
     # set range
@@ -95,40 +92,37 @@ for isamp in range(nsample):
             else:
                 gauxd_amp_A = np.zeros((nvel,nradgridxd,ngauss))
                 gauxd_mean_A = np.zeros((nvel,nradgridxd,ngauss))
-                gauxd_rr_A = np.zeros((nradgridxd))
+                gauxd_rr_A = np.zeros((nvel, nradgridxd))
 
-        filev = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
-        # read the data
-        rdatav = np.loadtxt(filev, comments='#')
-        iline = 0
-        for irad in range(nradgridxd):
-             for ii in range(ngauss):
-                 if isamp == 0:
-                     gauxd_amp_FRVS[ivel,irad,ii] = rdatav[iline,2]
-                     gauxd_mean_FRVS[ivel,irad,ii] = rdatav[iline,3]
-                     gauxd_rr_FRVS[irad] = rdatav[iline,1]
-                 elif isamp == 1:
-                     gauxd_amp_FF[ivel,irad,ii] = rdatav[iline,2]
-                     gauxd_mean_FF[ivel,irad,ii] = rdatav[iline,3]
-                     gauxd_rr_FF[irad] = rdatav[iline,1]
-                 else:
-                     gauxd_amp_A[ivel,irad,ii] = rdatav[iline,2]
-                     gauxd_mean_A[ivel,irad,ii] = rdatav[iline,3]
-                     gauxd_rr_A[irad] = rdatav[iline,1]
-                 iline += 1
-
-             if FlagFake == True:
-                 # fake data for the highest amplitude data
-                 # parameters
-                 if isamp == 0:
-                     gauxd_mean_FRVS[ivel,irad,0] = func(gauxd_rr_FRVS[irad], \
-                         ain,bin,cin,din,ein)
-                 elif isamp == 1:
-                     gauxd_mean_FF[ivel,irad,0] = func(gauxd_rr_FF[irad],
-                         ain,bin,cin,din,ein)
-                 else:
-                     gauxd_mean_A[ivel,irad,0] = func(gauxd_rr_A[irad], \
-                         ain,bin,0.8*cin,din,ein)
+        if isamp <= 1:
+            filev = 'gaussxd'+str(isamp)+'vel'+str(ivel)+'.asc'
+            # read the data
+            rdatav = np.loadtxt(filev, comments='#')
+            iline = 0
+            for irad in range(nradgridxd):
+                for ii in range(ngauss):
+                    if isamp == 0:
+                        gauxd_amp_FRVS[ivel,irad,ii] = rdatav[iline,2]
+                        gauxd_mean_FRVS[ivel,irad,ii] = rdatav[iline,3]
+                        gauxd_rr_FRVS[irad] = rdatav[iline,1]
+                    elif isamp == 1:
+                         gauxd_amp_FF[ivel,irad,ii] = rdatav[iline,2]
+                         gauxd_mean_FF[ivel,irad,ii] = rdatav[iline,3]
+                         gauxd_rr_FF[irad] = rdatav[iline,1]
+                    iline += 1
+        else:
+            filev = 'vzmed'+str(ivel)+'.asc'
+            print filev,' ngau, nradgrid =',ngauss, nradgridxd
+            # read the data
+            rdatav = np.loadtxt(filev, comments='#')
+            iline = 0
+            # median
+            ii = 0
+            for irad in range(nradgridxd):
+                # gauxd_amp_A[ivel,irad,ii] = rdatav[iline,3]
+                gauxd_mean_A[ivel,irad,ii] = rdatav[iline, 2]
+                gauxd_rr_A[ivel, irad] = rdatav[iline,1]
+                iline += 1
 
 # spiral arm positoin at l=0 or l=180 from Reid et al. (2014)
 rsunr14 = 8.34
@@ -187,10 +181,13 @@ xsp = np.array([rsun,rsun])
 plt.plot(xsp, ysp, linestyle='solid', linewidth=2, color='k')
 # plot only the highest amplitude peak
 # plt.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
-# Fw/RVS
+# median for RVS
+plt.scatter(gauxd_rr_A[0, :], gauxd_mean_A[0,:,0], \
+            c='grey', marker = 's', s=40)
+# RVS
 plt.scatter(gauxd_rr_FRVS,gauxd_mean_FRVS[1,:,0], \
             c='r', marker = 's', s=40)
-# FF
+# All
 plt.scatter(gauxd_rr_FF,gauxd_mean_FF[1,:,0], \
             c='k', marker = '^', s=40)
 # fitting with func
@@ -228,6 +225,6 @@ plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
 plt.tick_params(labelsize=16, color='k')
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+# plt.show()
 plt.savefig('RVzpeak.eps')
 plt.close()
