@@ -31,6 +31,9 @@ def funclin(x, a, b):
 
 ##### main programme start here #####
 
+# flag
+FigPaper = False
+
 # epoch
 epoch = 2000.0
 # constant for proper motion unit conversion
@@ -181,11 +184,13 @@ xsp = np.array([rsun,rsun])
 plt.plot(xsp, ysp, linestyle='solid', linewidth=2, color='k')
 # plot only the highest amplitude peak
 # plt.text(labpos[0], labpos[1], r'F w/RVS', fontsize=16, color='w')
-# median for RVS
-plt.scatter(gauxd_rr_A[0, :], gauxd_mean_A[0,:,0], \
+
+if FigPaper == True:
+    # median for RVS
+    plt.scatter(gauxd_rr_A[0, :], gauxd_mean_A[0,:,0], \
             c='grey', marker = 's', s=40)
-# RVS
-plt.scatter(gauxd_rr_FRVS,gauxd_mean_FRVS[1,:,0], \
+    # RVS
+    plt.scatter(gauxd_rr_FRVS,gauxd_mean_FRVS[1,:,0], \
             c='r', marker = 's', s=40)
 # All
 plt.scatter(gauxd_rr_FF,gauxd_mean_FF[1,:,0], \
@@ -220,11 +225,17 @@ ysp = func(xsp,params[0],params[1],params[2],params[3],params[4])
 # ysp = func(xsp,params[0],params[1],params[2],params[3],params[4])
 # plt.plot(xsp,ysp,color='b')
 # lables
-plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
-plt.tick_params(labelsize=16, color='k')
+if FigPaper == True:
+    plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+    plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
+    plt.tick_params(labelsize=16, color='k')
+else: 
+    plt.tick_params(labelsize=24, color='k')
 plt.grid(True)
 plt.tight_layout()
 # plt.show()
-plt.savefig('RVzpeak.eps')
+if FigPaper == True:
+    plt.savefig('RVzpeak.eps')
+else:
+    plt.savefig('RVzpeak.jpg')
 plt.close()

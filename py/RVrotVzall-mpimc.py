@@ -996,11 +996,11 @@ if myrank == 0:
     ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
     for ii in range(nsparm):
         xsp = np.array([rsparm[ii], rsparm[ii]])
-        if FigPaper == True:
-            ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
-        else: 
-            if ii == 0 or ii == 3: 
-                ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        # if FigPaper == True:
+        ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        # else: 
+        #    if ii == 0 or ii == 3: 
+        #        ax1.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
 
     # Sun's position
     xsp = np.array([rsun,rsun])
@@ -1084,8 +1084,8 @@ if myrank == 0:
     ysp = np.array([HFRVS_RVrot_yedges[0], HFRVS_RVrot_yedges[-1]])
     for ii in range(nsparm):
         xsp = np.array([rsparm[ii], rsparm[ii]])
-        if FigPaper == True:
-            ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
+        # if FigPaper == True:
+        ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
 #        else: 
 #            if ii == 0 or ii == 3: 
 #                # ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
@@ -1217,10 +1217,12 @@ if myrank == 0:
 
     # median
     # ax1.scatter(vzmed_rr_FRVS,vzmed_FRVS, c='w', marker = 'o')
-
-    ax1.text(labpos[0], labpos[1], r'RVS', fontsize=16, color='w')
-    ax1.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-    ax1.tick_params(labelsize=16, color='k')
+    if FigPaper == True:
+        ax1.text(labpos[0], labpos[1], r'RVS', fontsize=16, color='w')
+        ax1.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+        ax1.tick_params(labelsize=16, color='k')
+    else:
+        ax1.tick_params(labelsize=24, color='k')
     ax1.set_yticks(vzticks)
 
     im = ax2.imshow(HFF_RVz, interpolation='gaussian', origin='lower', \
@@ -1234,16 +1236,17 @@ if myrank == 0:
     for ii in range(nsparm):
         xsp = np.array([rsparm[ii], rsparm[ii]])
         ax2.plot(xsp, ysp, linestyle='dashed', linewidth=2, color='w')
-        if ii == 0:
-            ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Scutum', fontsize=16, color='w')
-        if ii == 1:
-            ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Sagittarius', fontsize=16, color='w')
-        if ii == 2:
-            ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Local', fontsize=16, color='w')
-        if ii == 3:
-            ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Perseus', fontsize=16, color='w')
-        if ii == 4:
-            ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Outer', fontsize=16, color='w')
+        if FigPaper == True:
+            if ii == 0:
+                ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Scutum', fontsize=16, color='w')
+            if ii == 1:
+                ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Sagittarius', fontsize=16, color='w')
+            if ii == 2:
+                ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Local', fontsize=16, color='w')
+            if ii == 3:
+                ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Perseus', fontsize=16, color='w')
+            if ii == 4:
+                ax2.text(xsp[1]+0.05, ysp[1]-4.0, r'Outer', fontsize=16, color='w')
     # Sun's position
     xsp = np.array([rsun,rsun])
     ax2.plot(xsp, ysp, linestyle='solid', linewidth=2, color='w')
@@ -1260,19 +1263,28 @@ if myrank == 0:
                         c='w', marker = 'o')
     # median
     # ax2.scatter(vzmed_rr_FF,vzmed_FF, c='w', marker = 'o')
-
-    ax2.text(labpos[0], labpos[1], r'All', fontsize=16, color='w')
-    ax2.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-    ax2.tick_params(labelsize=16, color='k')
+    if FigPaper == True:
+        ax2.tick_params(labelsize=16, color='k')
+    else:
+        ax2.tick_params(labelsize=24, color='k')
     ax2.set_yticks(vzticks)
 
-    plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
-    plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
-    f.subplots_adjust(hspace=0.0, right = 0.8)
-    cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
-    cb = f.colorbar(im, cax=cbar_ax)
-    cb.ax.tick_params(labelsize=16)
+    if FigPaper == True:
+        ax2.text(labpos[0], labpos[1], r'All', fontsize=16, color='w')
+        ax2.set_ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+        plt.xlabel(r"$R_{\rm gal}$ (kpc)", fontsize=18)
+        plt.ylabel(r"$V_{\rm z}$ (km s$^{-1}$)", fontsize=18)
+        f.subplots_adjust(hspace=0.0, right = 0.8)
+        cbar_ax = f.add_axes([0.8, 0.15, 0.05, 0.7])
+        cb = f.colorbar(im, cax=cbar_ax)
+        cb.ax.tick_params(labelsize=16)
+    else:
+        f.subplots_adjust(hspace=0.0, right = 0.95)
+
     # plt.show()
-    plt.savefig('RVz.eps')
+    if FigPaper == True:
+        plt.savefig('RVz.eps')
+    else:
+        plt.savefig('RVz.jpg')
     plt.close(f)
 
